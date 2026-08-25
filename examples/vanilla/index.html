@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Asiyst vanilla example</title>
+    <style>
+      body { font: 16px/1.5 system-ui; margin: 0; }
+      header, footer { padding: 16px 24px; background: #0f172a; color: #fff; }
+      main { padding: 24px; max-width: 720px; }
+      nav a { color: #fff; margin-right: 12px; }
+      button, input { font: inherit; padding: 8px 12px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <nav aria-label="Main">
+        <a href="#home">Home</a>
+        <a href="#products" data-asiyst="products">Products</a>
+        <a href="#coupons" data-asiyst="coupons">Coupons</a>
+      </nav>
+    </header>
+    <main>
+      <h1>Storefront</h1>
+      <p>This page shows developer-defined targets. Cloud must still supply plans and replies.</p>
+      <input data-asiyst="search" type="search" placeholder="Search" aria-label="Search" />
+      <button data-asiyst="filters">Filters</button>
+      <button data-asiyst="checkout" data-asiyst-description="Proceed to checkout">Checkout</button>
+    </main>
+    <footer>Example only</footer>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

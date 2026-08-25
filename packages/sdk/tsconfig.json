@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "rootDir": ".",
+    "outDir": "dist",
+    "types": []
+  },
+  "include": ["src", "tests", "tsup.config.ts", "vitest.config.ts"]
+}

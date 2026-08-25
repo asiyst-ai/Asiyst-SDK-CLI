@@ -1,0 +1,52 @@
+{
+  "name": "@asiyst/sdk",
+  "version": "0.1.0",
+  "description": "Client-side runtime that connects a website to Asiyst Cloud",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Asiyst/asiyst-sdk.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://asiyst.com",
+  "bugs": {
+    "url": "https://github.com/Asiyst/asiyst-sdk/issues"
+  },
+  "keywords": [
+    "asiyst",
+    "sdk",
+    "assistant",
+    "website"
+  ],
+  "devDependencies": {
+    "jsdom": "^25.0.1",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

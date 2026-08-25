@@ -1,0 +1,17 @@
+{
+  "name": "asiyst",
+  "private": true,
+  "description": "Asiyst public SDK and CLI monorepo",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @asiyst/sdk && npm run build -w asiyst",
+    "test": "npm run test -w @asiyst/sdk && npm run test -w asiyst",
+    "typecheck": "npm run typecheck -w @asiyst/sdk && npm run typecheck -w asiyst"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "license": "MIT"
+}
