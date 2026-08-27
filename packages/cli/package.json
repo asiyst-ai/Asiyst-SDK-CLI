@@ -1,14 +1,16 @@
 {
-  "name": "asiyst",
-  "version": "0.1.0",
-  "description": "CLI for installing and connecting the Asiyst SDK",
+  "name": "@asiyst/cli",
+  "version": "0.2.0",
+  "description": "Connect and verify Asiyst SDK projects",
   "license": "MIT",
   "type": "module",
   "bin": {
     "asiyst": "./dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsup",
@@ -18,12 +20,6 @@
   "engines": {
     "node": ">=18.18.0"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Asiyst/asiyst-sdk.git",
-    "directory": "packages/cli"
-  },
-  "homepage": "https://asiyst.com",
   "devDependencies": {
     "@types/node": "^22.10.2",
     "tsup": "^8.3.5",

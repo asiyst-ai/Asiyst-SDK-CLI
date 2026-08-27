@@ -1,4 +1,4 @@
-import type { HighlightStyle, MappedElement, TargetRef } from "../types";
+import type { HighlightStyle, TargetRef } from "../types";
 
 export interface AsiystEventMap {
   "asiyst:initialized": { projectId: string };
