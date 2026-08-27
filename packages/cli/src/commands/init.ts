@@ -3,8 +3,10 @@ import { configWarning, hasConfiguration } from "../config/local.js";
 import { detectProject } from "../detection/project.js";
 import { ok } from "../ui/output.js";
 import { connect, confirm } from "./shared.js";
+import { ensureTrusted } from "./trust.js";
 
 export async function initCommand(cwd = process.cwd(), api = new ApiClient()): Promise<void> {
+  if (!(await ensureTrusted(cwd))) return;
   const project = detectProject(cwd);
   if (!project.packageJson) throw new Error("No package.json found. Run this command from your website project.");
   console.log(`Detected ${project.framework} project.`);

@@ -50,11 +50,17 @@ export function detectProject(cwd = process.cwd()): ProjectDetection {
     }
   }
   const env = { ...readEnv(cwd), ...process.env } as Record<string, string | undefined>;
+  const packageManager = existsSync(resolve(cwd, "pnpm-lock.yaml")) ? "pnpm" :
+    existsSync(resolve(cwd, "yarn.lock")) ? "yarn" :
+      existsSync(resolve(cwd, "bun.lockb")) || existsSync(resolve(cwd, "bun.lock")) ? "bun" : "npm";
+  const sourceFiles = ["tsconfig.json", "src", "app"].some((entry) => existsSync(resolve(cwd, entry)));
   return {
     cwd,
     packageJson,
     sdkVersion: packageJson ? dependencyVersion(packageJson) : undefined,
     framework: detectFramework(cwd, packageJson),
+    language: sourceFiles ? "TypeScript" : "JavaScript",
+    packageManager,
     config: {
       projectId: env.ASIIYST_PROJECT_ID,
       publicKey: env.ASIIYST_PUBLIC_KEY,

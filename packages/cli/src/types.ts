@@ -5,6 +5,8 @@ export interface ProjectDetection {
   packageJson: Record<string, unknown> | null;
   sdkVersion?: string;
   framework: string;
+  language: string;
+  packageManager: string;
   config: { projectId?: string; publicKey?: string };
 }
 

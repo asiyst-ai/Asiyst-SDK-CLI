@@ -1,6 +1,6 @@
 {
   "name": "@asiyst/cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Connect and verify Asiyst SDK projects",
   "license": "MIT",
   "type": "module",

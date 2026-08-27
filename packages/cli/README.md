@@ -7,12 +7,12 @@ The `asiyst` CLI connects a website that uses `@asiyst/sdk` to an Asiyst project
 ```sh
 npx asiyst
 # or
-npm install -g asiyst
+npm install -g @asiyst/cli
 ```
 
 ## Commands
 
-`asiyst` detects the current project. Use `asiyst init` to start the browser-only authentication and project connection flow. Other commands are `login`, `logout`, `status`, `verify`, `doctor`, and `dashboard`.
+`asiyst` detects the current project and opens an interactive command prompt. Use `asiyst connect` (or `asiyst init`) to start the browser-only authentication and project connection flow. Other commands are `login`, `logout`, `status`, `verify`, `doctor`/`diagnostics`, `dashboard`, `avatar`, `trust`, and `revoke-trust`.
 
 The CLI creates a short-lived, single-use session through `POST /api/cli/sessions`, opens its returned URL, and polls `GET /api/cli/sessions/:sessionId/status`. Passwords, AI provider keys, Supabase keys, and private API credentials are never requested, placed in URLs, or logged.
 
