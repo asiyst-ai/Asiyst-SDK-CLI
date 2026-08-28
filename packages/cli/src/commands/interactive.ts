@@ -9,6 +9,7 @@ import { initCommand } from "./init.js";
 import { statusCommand } from "./status.js";
 import { logoutCommand } from "./logout.js";
 import { revokeTrustCommand, trustCommand } from "./trust.js";
+import { readCurrentVersion } from "../update/check.js";
 
 const commands = ["connect", "status", "diagnostics", "dashboard", "avatar", "help", "version", "trust", "revoke-trust", "logout", "exit"];
 export function resolveInput(value: string): string {
@@ -45,7 +46,7 @@ export async function interactiveHome(): Promise<void> {
     else if (command === "trust") await trustCommand();
     else if (command === "revoke-trust") revokeTrustCommand();
     else if (command === "help") interactiveHelp();
-    else if (command === "version") console.log("0.2.0");
+    else if (command === "version") console.log(readCurrentVersion());
     else console.log(`Unknown command: ${value}\nRun \`asiyst help\` for available commands.`);
   }
   readline.close();

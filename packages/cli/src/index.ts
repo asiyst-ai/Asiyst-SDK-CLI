@@ -10,11 +10,14 @@ import { dashboardCommand } from "./commands/dashboard.js";
 import { avatarCommand } from "./commands/avatar.js";
 import { revokeTrustCommand, trustCommand } from "./commands/trust.js";
 import { interactiveHelp, interactiveHome } from "./commands/interactive.js";
+import { checkAndUpdate } from "./update/check.js";
+import { readCurrentVersion } from "./update/check.js";
 import { fileURLToPath } from "node:url";
 
-export const CLI_VERSION = "0.2.0";
+export const CLI_VERSION = readCurrentVersion();
 function help(): void { interactiveHelp(); }
 export async function main(argv = process.argv.slice(2)): Promise<void> {
+  if (await checkAndUpdate(argv)) return;
   const command = argv[0] || "";
   if (command === "--help" || command === "-h") return help();
   if (command === "--version" || command === "-v") return console.log(CLI_VERSION);

@@ -1,9 +1,10 @@
 import type { ProjectDetection, VerificationResult } from "../types.js";
+import { readCurrentVersion } from "../update/check.js";
 
 export const ok = (label: string, detail = "") => console.log(`✓ ${label}${detail ? ` (${detail})` : ""}`);
 export const fail = (label: string, detail = "") => console.log(`✗ ${label}${detail ? `: ${detail}` : ""}`);
-export function banner(): void {
-  console.log(`\n╭──────────────────────────────────────────────╮\n│                                              │\n│       ASIYST                                 │\n│       AI ASSISTANT PLATFORM                  │\n│       v0.2.0                                 │\n│                                              │\n╰──────────────────────────────────────────────╯\n`);
+export function banner(version = readCurrentVersion()): void {
+  console.log(`\n╭──────────────────────────────────────────────╮\n│                                              │\n│       ASIYST                                 │\n│       AI ASSISTANT PLATFORM                  │\n│       v${version.padEnd(38)}│\n│                                              │\n╰──────────────────────────────────────────────╯\n`);
 }
 export function projectChecks(project: ProjectDetection): void {
   project.packageJson ? ok("Project detected", typeof project.packageJson.name === "string" ? project.packageJson.name : project.cwd) : fail("Project not detected", "package.json is missing");
