@@ -28,13 +28,13 @@ export function interactiveHelp(): void {
 }
 export async function interactiveHome(): Promise<void> {
   const project = detectProject();
+  // homeStatus delegates to homeScreen which renders the full TUI welcome screen
   homeStatus(project);
-  console.log("\n> Type a command or ask anything...\n\nSuggestions: [connect] [status] [diagnostics] [dashboard] [avatar] [help]");
   const readline = createInterface({ input, output, historySize: 50, completer: (line) => [commands.filter((item) => item.startsWith(line)), line] });
   readline.on("SIGINT", () => readline.close());
   for (;;) {
     let value: string;
-    try { value = await readline.question("\n> "); } catch { break; }
+    try { value = await readline.question("\x1b[94m>\x1b[0m  "); } catch { break; }
     const command = resolveInput(value);
     if (command === "exit" || command === "quit" || !command) break;
     if (command === "connect") await initCommand();
@@ -47,7 +47,7 @@ export async function interactiveHome(): Promise<void> {
     else if (command === "revoke-trust") revokeTrustCommand();
     else if (command === "help") interactiveHelp();
     else if (command === "version") console.log(readCurrentVersion());
-    else console.log(`Unknown command: ${value}\nRun \`asiyst help\` for available commands.`);
+    else console.log(`\x1b[90mUnknown command:\x1b[0m ${value}\nRun \x1b[96masiyst help\x1b[0m for available commands.`);
   }
   readline.close();
 }
