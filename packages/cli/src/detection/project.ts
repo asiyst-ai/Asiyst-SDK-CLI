@@ -25,19 +25,6 @@ export function detectFramework(cwd: string, pkg: Record<string, unknown> | null
   return "Vanilla JavaScript/TypeScript";
 }
 
-function readEnv(cwd: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  const path = resolve(cwd, ".env");
-  if (!existsSync(path)) return result;
-  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
-    const match = /^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*?)\s*$/.exec(line);
-    if (match && !match[1].toLowerCase().includes("secret") && !match[1].toLowerCase().includes("token")) {
-      result[match[1]] = match[2].replace(/^(['"])(.*)\1$/, "$2");
-    }
-  }
-  return result;
-}
-
 export function detectProject(cwd = process.cwd()): ProjectDetection {
   const path = resolve(cwd, "package.json");
   let packageJson: Record<string, unknown> | null = null;
@@ -49,7 +36,8 @@ export function detectProject(cwd = process.cwd()): ProjectDetection {
       packageJson = null;
     }
   }
-  const env = { ...readEnv(cwd), ...process.env } as Record<string, string | undefined>;
+  // Never inspect dotenv files; public project values can be supplied by the invoking environment.
+  const env = process.env as Record<string, string | undefined>;
   const packageManager = existsSync(resolve(cwd, "pnpm-lock.yaml")) ? "pnpm" :
     existsSync(resolve(cwd, "yarn.lock")) ? "yarn" :
       existsSync(resolve(cwd, "bun.lockb")) || existsSync(resolve(cwd, "bun.lock")) ? "bun" : "npm";

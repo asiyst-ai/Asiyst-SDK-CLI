@@ -1,4 +1,4 @@
-import type { InitOptions, ProjectConfig, TargetInput, TaskDefinition, WorkflowDefinition } from "../types";
+import type { InitOptions, ProjectConfig, TaskDefinition, WorkflowDefinition } from "../types";
 import { DEFAULT_API_BASE_URL } from "./constants";
 import { InitializationError } from "../errors";
 import { EventBus } from "../events/EventBus";
@@ -45,6 +45,7 @@ export class AsiystRuntime {
   private readonly panel: ConversationPanel;
   private readonly renderer: CssAvatarRenderer;
   private destroyed = false;
+  private connectionStatus: "connected" | "disconnected" | "offline" = "disconnected";
   private readonly rescanDebounced = debounce(() => this.rescan(), DOM_SCAN_DEBOUNCE_MS);
 
   constructor(options: InitOptions, doc: Document, win: Window) {
@@ -115,7 +116,21 @@ export class AsiystRuntime {
     const cfg = await isolateAsync(() => this.config.refresh(), this.config.get());
     this.avatar.applyConfig(cfg);
     this.avatar.show();
+    try {
+      const heartbeat = await this.cloud.heartbeat({
+        origin: window.location.origin,
+        environment: this.options.apiBaseUrl ? "development" : "production",
+        timestamp: new Date().toISOString(),
+      });
+      this.connectionStatus = heartbeat.ok ? "connected" : "disconnected";
+    } catch {
+      this.connectionStatus = "offline";
+    }
     this.events.emit("asiyst:ready", { projectId: this.options.projectId, configVersion: cfg.version });
+  }
+
+  getConnectionStatus(): "connected" | "disconnected" | "offline" {
+    return this.connectionStatus;
   }
 
   getConfig(): ProjectConfig {

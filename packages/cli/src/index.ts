@@ -1,4 +1,4 @@
-import { banner, projectChecks } from "./ui/output.js";
+import { projectChecks } from "./ui/output.js";
 import { detectProject } from "./detection/project.js";
 import { initCommand } from "./commands/init.js";
 import { loginCommand } from "./commands/login.js";
@@ -10,15 +10,18 @@ import { dashboardCommand } from "./commands/dashboard.js";
 import { avatarCommand } from "./commands/avatar.js";
 import { revokeTrustCommand, trustCommand } from "./commands/trust.js";
 import { interactiveHelp, interactiveHome } from "./commands/interactive.js";
-import { checkAndUpdate } from "./update/check.js";
-import { readCurrentVersion } from "./update/check.js";
+import { readCurrentVersion } from "./config/version.js";
+import { notifyIfUpdateAvailable } from "./update/check.js";
+import { updateCommand } from "./commands/update.js";
 import { fileURLToPath } from "node:url";
 
 export const CLI_VERSION = readCurrentVersion();
 function help(): void { interactiveHelp(); }
 export async function main(argv = process.argv.slice(2)): Promise<void> {
-  if (await checkAndUpdate(argv)) return;
   const command = argv[0] || "";
+  if (command !== "update" && !argv.includes("--version") && !argv.includes("-v") && !argv.includes("--help") && !argv.includes("-h")) {
+    await notifyIfUpdateAvailable();
+  }
   if (command === "--help" || command === "-h") return help();
   if (command === "--version" || command === "-v") return console.log(CLI_VERSION);
   if (command === "init" || command === "connect") return initCommand();
@@ -32,9 +35,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   if (command === "avatar") return avatarCommand();
   if (command === "trust") return trustCommand();
   if (command === "revoke-trust") return revokeTrustCommand();
+  if (command === "update") return updateCommand();
   if (command === "help") return help();
   if (command === "version") return console.log(CLI_VERSION);
-  banner();
   if (!process.stdin.isTTY) {
     const project = detectProject();
     projectChecks(project);

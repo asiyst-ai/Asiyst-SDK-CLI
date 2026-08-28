@@ -6,7 +6,7 @@
 await Asiyst.init({
   projectId: string;
   publicKey: string;
-  apiBaseUrl?: string; // default https://api.asiyst.com
+  apiBaseUrl?: string; // default https://asiyst.com/api/v1
   mode?: "guided" | "assist";
   allowedActions?: ActionKind[];
   observeHistory?: boolean; // default true; wraps pushState/replaceState

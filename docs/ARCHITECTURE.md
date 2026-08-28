@@ -7,7 +7,7 @@ Monorepo:
 - `packages/sdk` — browser runtime published as `@asiyst/sdk`
 - `packages/cli` — Node CLI published as `asiyst` (`npx asiyst init`)
 
-The CLI is not bundled into the browser SDK. Cloud is a separate system (`https://api.asiyst.com`). This repo only defines the client contracts.
+The CLI is not bundled into the browser SDK. The production API is served by the web application at `https://asiyst.com/api/v1`.
 
 ## 2. Module responsibilities
 

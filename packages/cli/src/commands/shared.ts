@@ -1,8 +1,7 @@
-import { createInterface } from "node:readline/promises";
-import { stdin as input, stdout as output } from "node:process";
 import { ApiClient } from "../api/client.js";
 import { openBrowser } from "../browser/open.js";
 import type { CliSession, SafeProjectInfo } from "../types.js";
+import { selectOption } from "../ui/selector.js";
 
 export async function connect(api = new ApiClient()): Promise<{ session: CliSession; project?: SafeProjectInfo }> {
   const session = await api.createSession();
@@ -21,9 +20,10 @@ export async function connect(api = new ApiClient()): Promise<{ session: CliSess
 }
 
 export async function confirm(question: string): Promise<boolean> {
-  if (!process.stdin.isTTY) return true;
-  const readline = createInterface({ input, output });
-  const answer = await readline.question(`${question} [y/N] `);
-  readline.close();
-  return /^y(es)?$/i.test(answer.trim());
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return true;
+  const result = await selectOption(question, [
+    { label: "Yes", value: true },
+    { label: "No", value: false },
+  ]);
+  return result.type === "selected" && result.value;
 }

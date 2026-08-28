@@ -1,7 +1,7 @@
 {
-  "name": "@asiyst/sdk",
-  "version": "1.0.0",
+  "name": "asiyst-sdk-cli",
   "private": true,
+  "version": "1.0.0",
   "description": "Asiyst public SDK and CLI monorepo",
   "keywords": [
     "ai",
@@ -26,7 +26,6 @@
   "license": "MIT",
   "author": "Asiyst",
   "type": "commonjs",
-  "main": "index.js",
   "directories": {
     "doc": "docs",
     "example": "examples"

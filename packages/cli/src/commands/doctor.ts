@@ -9,5 +9,10 @@ export async function doctorCommand(cwd = process.cwd(), api = new ApiClient()):
   project.packageJson ? ok("Project", cwd) : fail("Project", "package.json is missing");
   project.sdkVersion ? ok("SDK", project.sdkVersion) : fail("SDK", "not installed");
   project.config.projectId && project.config.publicKey ? ok("Configuration") : fail("Configuration", "public project values are missing");
-  try { await api.projectInfo(project.config.projectId || ""); ok("Asiyst API"); } catch (error) { fail("Asiyst API", error instanceof Error ? error.message : "unreachable"); }
+  try { await api.health(); ok("Asiyst API", "HTTPS health endpoint reachable"); }
+  catch (error) { fail("Asiyst API", error instanceof Error ? error.message : "unreachable"); }
+  if (project.config.projectId && project.config.publicKey) {
+    try { await api.projectInfo(project.config.projectId); ok("Project connection"); }
+    catch (error) { fail("Project connection", error instanceof Error ? error.message : "unavailable"); }
+  }
 }

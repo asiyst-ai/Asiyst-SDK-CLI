@@ -1,11 +1,11 @@
 {
   "name": "@asiyst/cli",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "description": "Connect and verify Asiyst SDK projects",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "asiyst": "./dist/index.js"
+    "asiyst": "dist/index.js"
   },
   "files": [
     "dist",

@@ -1,17 +1,17 @@
-export function debounce<T extends (...args: never[]) => void>(
-  fn: T,
+export function debounce<Args extends unknown[]>(
+  fn: (...args: Args) => void,
   waitMs: number,
-): T & { cancel: () => void } {
+): ((...args: Args) => void) & { cancel: () => void } {
   let timer: ReturnType<typeof setTimeout> | undefined;
 
-  const wrapped = ((...args: never[]) => {
+  const wrapped = ((...args: Args) => {
     if (timer) {
       clearTimeout(timer);
     }
     timer = setTimeout(() => {
       fn(...args);
     }, waitMs);
-  }) as T & { cancel: () => void };
+  }) as ((...args: Args) => void) & { cancel: () => void };
 
   wrapped.cancel = () => {
     if (timer) {
@@ -23,20 +23,20 @@ export function debounce<T extends (...args: never[]) => void>(
   return wrapped;
 }
 
-export function throttle<T extends (...args: never[]) => void>(
-  fn: T,
+export function throttle<Args extends unknown[]>(
+  fn: (...args: Args) => void,
   waitMs: number,
-): T & { cancel: () => void } {
+): ((...args: Args) => void) & { cancel: () => void } {
   let last = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let pending: never[] | undefined;
+  let pending: Args | undefined;
 
-  const invoke = (args: never[]) => {
+  const invoke = (args: Args) => {
     last = Date.now();
     fn(...args);
   };
 
-  const wrapped = ((...args: never[]) => {
+  const wrapped = ((...args: Args) => {
     const now = Date.now();
     const remaining = waitMs - (now - last);
     pending = args;
@@ -56,7 +56,7 @@ export function throttle<T extends (...args: never[]) => void>(
         }
       }, remaining);
     }
-  }) as T & { cancel: () => void };
+  }) as ((...args: Args) => void) & { cancel: () => void };
 
   wrapped.cancel = () => {
     if (timer) {

@@ -41,19 +41,9 @@ Mark important controls so the assistant can find them across layouts:
 </button>
 ```
 
-## Local development
+The production API base is `https://asiyst.com/api/v1`. It is used by default and can only be overridden explicitly through `apiBaseUrl` for a controlled non-production deployment.
 
-Point the SDK at a local Cloud implementation:
-
-```ts
-await Asiyst.init({
-  projectId: "dev_project",
-  publicKey: "dev_public_key",
-  apiBaseUrl: "http://localhost:8787",
-});
-```
-
-If Cloud is unreachable, the SDK keeps a fallback avatar configuration and continues to run local APIs (`avatar.moveTo`, highlighting, events). Conversation replies and task plans are not invented locally; those requests fail until Cloud responds.
+If Cloud is unreachable, the SDK keeps a fallback avatar configuration and exposes `getConnectionStatus()` as `offline`. Conversation replies and task plans are not invented locally; those requests fail until Cloud responds.
 
 ## Documentation
 

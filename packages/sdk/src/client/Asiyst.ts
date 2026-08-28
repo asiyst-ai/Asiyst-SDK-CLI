@@ -50,6 +50,10 @@ export const Asiyst = {
     return requireRuntime().getConfig();
   },
 
+  getConnectionStatus(): "connected" | "disconnected" | "offline" {
+    return requireRuntime().getConnectionStatus();
+  },
+
   avatar: {
     show(): void {
       withIsolation(() => requireRuntime().avatarApi().show());

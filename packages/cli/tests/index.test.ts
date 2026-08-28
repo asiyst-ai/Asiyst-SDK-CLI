@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { main } from "../src/index.js";
-import { readCurrentVersion } from "../src/update/check.js";
+import { readCurrentVersion } from "../src/config/version.js";
 
 describe("CLI entrypoint", () => {
   it("prints help and version without network access", async () => {

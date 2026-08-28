@@ -44,7 +44,7 @@ const AVATAR_CSS = `
 
 export class CssAvatarRenderer implements AvatarRenderer {
   private root: HTMLElement | undefined;
-  private figure: HTMLElement | undefined;
+  private figure: HTMLButtonElement | undefined;
   private bubble: HTMLElement | undefined;
   private nameEl: HTMLElement | undefined;
   private size = 96;

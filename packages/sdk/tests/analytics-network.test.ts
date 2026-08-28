@@ -29,7 +29,7 @@ describe("cloud communication", () => {
       vi.fn().mockRejectedValue(new Error("offline")),
     );
     const client = new Client(
-      new HttpTransport({ apiBaseUrl: "https://api.asiyst.com", projectId: "p", publicKey: "k" }),
+      new HttpTransport({ apiBaseUrl: "https://asiyst.com/api/v1", projectId: "p", publicKey: "k" }),
       "p",
     );
     await expect(client.requestTask("find coupons", "https://shop.example/")).rejects.toBeInstanceOf(NetworkError);

@@ -30,12 +30,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Asiyst/asiyst-sdk.git",
+    "url": "https://github.com/asiyst-ai/Asiyst-SDK-CLI.git",
     "directory": "packages/sdk"
   },
   "homepage": "https://asiyst.com",
   "bugs": {
-    "url": "https://github.com/Asiyst/asiyst-sdk/issues"
+    "url": "https://github.com/asiyst-ai/Asiyst-SDK-CLI/issues"
   },
   "keywords": [
     "asiyst",

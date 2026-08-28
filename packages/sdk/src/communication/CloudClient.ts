@@ -1,5 +1,6 @@
 import type { ProjectConfig, TaskDefinition, WebsiteMapSnapshot, WorkflowDefinition } from "../types";
 import { AuthenticationError, NetworkError } from "../errors";
+import { SDK_VERSION } from "../core/constants";
 import { normalizeProjectConfig } from "../config/schema";
 import type { CloudTransport, ConversationReply } from "./types";
 
@@ -11,21 +12,41 @@ export class CloudClient {
 
   async fetchConfig(): Promise<ProjectConfig> {
     const response = await this.transport.request<{ config?: unknown }> ({
-      path: `/v1/projects/${encodeURIComponent(this.projectId)}/config`,
+      path: `/projects/${encodeURIComponent(this.projectId)}/avatar`,
       method: "GET",
     });
     if (response.status === 401 || response.status === 403) {
       throw new AuthenticationError("Project credentials were rejected");
     }
+
     if (!response.ok || !response.data) {
       throw new NetworkError("Project configuration could not be loaded");
     }
     return normalizeProjectConfig(response.data.config ?? response.data);
   }
 
+  async heartbeat(metadata: {
+    origin: string;
+    environment: string;
+    timestamp: string;
+  }): Promise<{ ok: boolean; status: number }> {
+    const response = await this.transport.request({
+      path: "/sdk/heartbeat",
+      method: "POST",
+      body: {
+        projectId: this.projectId,
+        sdkVersion: SDK_VERSION,
+        websiteOrigin: metadata.origin,
+        environment: metadata.environment,
+        timestamp: metadata.timestamp,
+      },
+    });
+    return { ok: response.ok, status: response.status };
+  }
+
   async requestTask(userText: string, pageUrl: string): Promise<TaskDefinition> {
     const response = await this.transport.request<{ task?: TaskDefinition }>({
-      path: "/v1/tasks",
+      path: "/tasks",
       method: "POST",
       body: {
         projectId: this.projectId,
@@ -41,7 +62,7 @@ export class CloudClient {
 
   async fetchWorkflow(workflowId: string): Promise<WorkflowDefinition> {
     const response = await this.transport.request<{ workflow?: WorkflowDefinition }>({
-      path: `/v1/workflows/${encodeURIComponent(workflowId)}`,
+      path: `/workflows/${encodeURIComponent(workflowId)}`,
       method: "GET",
     });
     if (!response.ok || !response.data?.workflow?.id || !Array.isArray(response.data.workflow.steps)) {
@@ -55,7 +76,7 @@ export class CloudClient {
     pageUrl: string,
   ): Promise<ConversationReply> {
     const response = await this.transport.request<ConversationReply>({
-      path: "/v1/conversations/messages",
+      path: "/conversations/messages",
       method: "POST",
       body: { projectId: this.projectId, text, pageUrl },
     });
@@ -66,15 +87,15 @@ export class CloudClient {
   }
 
   async sendWebsiteMap(snapshot: WebsiteMapSnapshot): Promise<void> {
-    await this.safePost("/v1/website-maps", snapshot);
+    await this.safePost("/website-maps", snapshot);
   }
 
   async sendAnalytics(events: unknown[]): Promise<void> {
-    await this.safePost("/v1/analytics", { events });
+    await this.safePost("/analytics", { events });
   }
 
   async sendTaskUpdate(taskId: string, status: string, stepId?: string): Promise<void> {
-    await this.safePost(`/v1/tasks/${encodeURIComponent(taskId)}/events`, {
+    await this.safePost(`/tasks/${encodeURIComponent(taskId)}/events`, {
       status,
       stepId,
     });

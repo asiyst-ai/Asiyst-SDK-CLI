@@ -1,31 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
-import { checkForUpdate, compareVersions, isCiEnvironment, shouldCheckForUpdate, updateAndRestart } from "../src/update/check.js";
+import { checkForUpdate, compareVersions, detectInstallKind, installLatest } from "../src/update/check.js";
 
-describe("CLI update check", () => {
-  it("compares stable and prerelease semantic versions", () => {
-    expect(compareVersions("0.2.2", "0.2.1")).toBe(1);
+describe("manual CLI updates", () => {
+  it("compares semantic versions without downgrading", () => {
+    expect(compareVersions("1.0.2", "1.0.1")).toBe(1);
     expect(compareVersions("1.0.0-beta.2", "1.0.0-beta.10")).toBe(-1);
     expect(compareVersions("1.0.0", "1.0.0-rc.1")).toBe(1);
   });
-  it("reads the latest registry version", async () => {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({ version: "0.2.2" }), { status: 200 }));
-    await expect(checkForUpdate("0.2.1", fetcher)).resolves.toEqual({ currentVersion: "0.2.1", latestVersion: "0.2.2" });
-    expect(fetcher).toHaveBeenCalledWith(expect.stringContaining("registry.npmjs.org"), expect.objectContaining({ signal: expect.any(AbortSignal) }));
-  });
   it("fails open when npm is unavailable", async () => {
     const fetcher = vi.fn(async () => { throw new Error("offline"); });
-    await expect(checkForUpdate("0.2.1", fetcher)).resolves.toEqual({ currentVersion: "0.2.1" });
+    await expect(checkForUpdate("1.0.2", fetcher)).resolves.toEqual({ currentVersion: "1.0.2" });
   });
-  it("skips CI and non-interactive sessions", () => {
-    expect(isCiEnvironment({ CI: "true" })).toBe(true);
-    expect(shouldCheckForUpdate({ CI: "true" }, true)).toBe(false);
-    expect(shouldCheckForUpdate({}, false)).toBe(false);
-  });
-  it("restarts once with the updated package and guard flag", () => {
-    const runner = vi.fn();
-    expect(updateAndRestart("0.2.2", ["status"], { PATH: "test" }, runner)).toBe(true);
-    expect(runner).toHaveBeenCalledWith("npx.cmd", ["--yes", "@asiyst/cli@0.2.2", "status"], expect.objectContaining({
-      env: expect.objectContaining({ ASIIYST_UPDATE_ATTEMPTED: "1" }),
-    }));
+  it("detects npx and verifies a downloaded package", () => {
+    expect(detectInstallKind("C:\\Users\\dev\\AppData\\Local\\npm-cache\\_npx\\x\\node_modules\\@asiyst\\cli\\dist\\index.js", {}, () => undefined)).toBe("npx");
+    const runner = vi.fn(() => "1.0.3\n");
+    expect(installLatest("1.0.3", "npx", "ignored", runner)).toBe("1.0.3");
+    expect(runner).toHaveBeenCalledWith("npx.cmd", ["--yes", "@asiyst/cli@1.0.3", "--version"], { encoding: "utf8" });
   });
 });
