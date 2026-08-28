@@ -9,13 +9,13 @@ The SDK runs on third-party websites. Asiyst Cloud owns authentication, planning
 | Package | Role |
 | --- | --- |
 | `@asiyst/sdk` | Browser runtime |
-| `asiyst` | CLI (`npx asiyst init`) |
+| `@asiyst/cli` | CLI (`npx @asiyst/cli connect` or `asiyst connect`) |
 
 ## Install
 
 ```bash
 npm install @asiyst/sdk
-npx asiyst init
+npx @asiyst/cli init
 ```
 
 ```ts

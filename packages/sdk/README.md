@@ -13,7 +13,7 @@ npm install @asiyst/sdk
 Then connect the project:
 
 ```bash
-npx asiyst init
+npx @asiyst/cli init
 ```
 
 `asiyst init` opens [https://asiyst.com](https://asiyst.com) so you can create a project and copy credentials. Avatar appearance and behavior live in Asiyst Cloud so you can change them without redeploying the site.

@@ -113,7 +113,21 @@ export class TargetResolver {
     if (!best || bestScore < 2) {
       return null;
     }
-    return findElementByAsiystId(this.doc, best.id) ?? this.doc.querySelector(`[id="${best.id.replace(/^dom:/, "")}"]`);
+    return findElementByAsiystId(this.doc, best.id)
+      ?? this.doc.querySelector(`[id="${best.id.replace(/^dom:/, "")}"]`)
+      ?? this.findMappedElement(best);
+  }
+
+  private findMappedElement(mapped: MappedElement): Element | null {
+    const candidates = Array.from(this.doc.querySelectorAll("a[href], button, input, select, textarea, form, nav, h1, h2, h3, [role]"));
+    return candidates.find((element) => {
+      if (!isElementVisible(element) || isDisabled(element)) return false;
+      const text = normalize(`${element.getAttribute("aria-label") ?? ""} ${element.textContent ?? ""}`);
+      const wanted = normalize(`${mapped.label} ${mapped.text}`);
+      const role = normalize(element.getAttribute("role") ?? "");
+      return (wanted.length > 0 && (text.includes(wanted) || wanted.includes(text))) ||
+        (mapped.role !== null && role === normalize(mapped.role));
+    }) ?? null;
   }
 
   private matchesMapped(item: MappedElement, element: Element, ref: TargetRef): boolean {

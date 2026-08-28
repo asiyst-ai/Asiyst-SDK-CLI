@@ -71,13 +71,14 @@ off();
 
 All network I/O goes through `CloudClient` / `HttpTransport`:
 
-- `GET /v1/projects/:id/config`
-- `POST /v1/tasks`
-- `POST /v1/tasks/:id/events`
-- `GET /v1/workflows/:id`
-- `POST /v1/conversations/messages`
-- `POST /v1/website-maps`
-- `POST /v1/analytics`
+- `GET /projects/:id/avatar`
+- `POST /sdk/heartbeat`
+- `POST /tasks`
+- `POST /tasks/:id/events`
+- `GET /workflows/:id`
+- `POST /conversations/messages`
+- `POST /website-maps`
+- `POST /analytics`
 
 Headers: `X-Asiyst-Project-Id`, `X-Asiyst-Public-Key`, `X-Asiyst-SDK-Version`.
 

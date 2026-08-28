@@ -30,15 +30,24 @@ export class ApiClient {
         response.status === 403 ? "The request is not authorized." :
           response.status === 404 ? "The requested resource was not found." :
             response.status === 409 ? "The request conflicts with the current project state." :
+            response.status === 422 ? "The request data was invalid." :
               response.status === 429 ? "Too many requests; try again shortly." :
                 response.status >= 500 ? "Asiyst is temporarily unavailable." : "The request was rejected.";
       throw new ApiError(`Asiyst API returned HTTP ${response.status}. ${detail}`, response.status);
+    }
+    if (body === undefined) {
+      throw new ApiError(`Asiyst API returned an invalid JSON response (HTTP ${response.status}).`, response.status);
     }
     return body as T;
   }
 
   health(): Promise<{ status?: string }> {
-    return this.request("/health");
+    return this.request<unknown>("/health").then((body) => {
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        throw new ApiError("Asiyst API health endpoint returned an invalid response.");
+      }
+      return body as { status?: string };
+    });
   }
 
   createSession(): Promise<CliSession> {

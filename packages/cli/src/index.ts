@@ -41,7 +41,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   if (!process.stdin.isTTY) {
     const project = detectProject();
     projectChecks(project);
-    console.log("\nRun `npx asiyst init` to connect this project, or `npx asiyst --help` for commands.");
+    console.log("\nRun `npx @asiyst/cli connect` to connect this project, or `npx @asiyst/cli --help` for commands.");
     return;
   }
   return interactiveHome();

@@ -6,7 +6,7 @@
 
 ## Avatar appears but does not answer
 
-Conversation and task planning require Asiyst Cloud. Check `apiBaseUrl`, project credentials, and the browser network panel for `/v1/conversations/messages` and `/v1/tasks`. The SDK will not fabricate replies.
+Conversation and task planning require Asiyst Cloud. Check `apiBaseUrl`, project credentials, and the browser network panel for `/api/v1/conversations/messages` and `/api/v1/tasks`. The SDK will not fabricate replies.
 
 ## Target not found
 
@@ -26,4 +26,4 @@ Asiyst chrome lives in shadow DOM. Page CSS should not reach it; if it does, the
 
 ## Analytics never shows in Cloud
 
-Failures are silent by design. Confirm `/v1/analytics` is implemented and that the tab is not blocking `fetch` on unload.
+Failures are isolated by design. Confirm `/api/v1/analytics` is implemented and that the tab is not blocking `fetch` on unload.

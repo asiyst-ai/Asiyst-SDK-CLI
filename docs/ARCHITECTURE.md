@@ -5,7 +5,7 @@
 Monorepo:
 
 - `packages/sdk` — browser runtime published as `@asiyst/sdk`
-- `packages/cli` — Node CLI published as `asiyst` (`npx asiyst init`)
+- `packages/cli` — Node CLI published as `@asiyst/cli` with the `asiyst` binary
 
 The CLI is not bundled into the browser SDK. The production API is served by the web application at `https://asiyst.com/api/v1`.
 

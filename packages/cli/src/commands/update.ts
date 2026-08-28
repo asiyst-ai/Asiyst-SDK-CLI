@@ -24,9 +24,9 @@ export async function updateCommand(): Promise<void> {
     if (!installed || compareVersions(installed, result.latestVersion) !== 0) {
       throw new Error("installed version could not be verified");
     }
-    console.log(`✓ Verifying installation\n\nAsiyst CLI successfully updated.\n\nVersion: ${installed}`);
-  } catch {
-    console.log("✗ Update failed. Your current CLI is unchanged.");
+    console.log(`✓ Verifying installation\n\nAsiyst CLI updated from ${result.currentVersion} to ${installed}.\nRestart Asiyst to use the new version.`);
+  } catch (error) {
+    console.log(`✗ Update failed. Your current CLI is unchanged.\n${error instanceof Error ? error.message : "Installation could not be verified."}`);
   }
 }
 

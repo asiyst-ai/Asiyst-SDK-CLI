@@ -1,4 +1,4 @@
-export const SDK_VERSION = "0.1.0";
+export const SDK_VERSION = "0.1.5";
 export const DEFAULT_API_BASE_URL = "https://asiyst.com/api/v1";
 export const CONFIG_SCHEMA_VERSION = 1;
 export const HOST_ELEMENT_ID = "asiyst-host";

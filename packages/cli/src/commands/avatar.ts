@@ -6,7 +6,7 @@ export async function avatarCommand(cwd = process.cwd(), api = new ApiClient()):
   const project = detectProject(cwd);
   if (!project.config.projectId) {
     console.log("Avatar\n─────────────────────────────\nNo avatar configured.\n\nCreate your avatar in the Asiyst dashboard.");
-    const url = ASIIYST_WEB_URL;
+    const url = `${ASIIYST_WEB_URL}/dashboard`;
     if (await openBrowser(url)) console.log(`Opening ${url}`); else console.log(`Open ${url}`);
     return;
   }

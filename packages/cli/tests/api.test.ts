@@ -10,4 +10,12 @@ describe("API client", () => {
     const fetcher = vi.fn(async () => new Response("no", { status: 503 }));
     await expect(new ApiClient("https://example.test", fetcher).createSession()).rejects.toBeInstanceOf(ApiError);
   });
+
+  it("rejects an HTML or otherwise invalid health response", async () => {
+    const fetcher = vi.fn(async () => new Response("<html>parked</html>", {
+      status: 200,
+      headers: { "content-type": "text/html" },
+    }));
+    await expect(new ApiClient("https://example.test", fetcher).health()).rejects.toThrow("invalid JSON");
+  });
 });

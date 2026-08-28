@@ -7,7 +7,7 @@ import { doctorCommand } from "./doctor.js";
 import { initCommand } from "./init.js";
 import { logoutCommand } from "./logout.js";
 import { statusCommand } from "./status.js";
-import { revokeTrustCommand, trustCommand, ensureTrusted } from "./trust.js";
+import { revokeTrustCommand, trustCommand } from "./trust.js";
 import { updateCommand } from "./update.js";
 import { readCurrentVersion } from "../config/version.js";
 
@@ -29,7 +29,6 @@ export function interactiveHelp(): void {
 }
 
 export async function interactiveHome(): Promise<void> {
-  if (!(await ensureTrusted())) return;
   homeStatus(detectProject());
   console.log("\nWelcome to Asiyst CLI.\nUse UP/DOWN to select a command, or type a command.\n");
   const suggestions = [

@@ -4,6 +4,7 @@ import type { CliSession, SafeProjectInfo } from "../types.js";
 import { selectOption } from "../ui/selector.js";
 
 export async function connect(api = new ApiClient()): Promise<{ session: CliSession; project?: SafeProjectInfo }> {
+  await api.health();
   const session = await api.createSession();
   console.log(`Opening Asiyst...\n${session.connectUrl}`);
   if (!(await openBrowser(session.connectUrl))) console.log("Automatic browser opening failed; open the URL above.");
