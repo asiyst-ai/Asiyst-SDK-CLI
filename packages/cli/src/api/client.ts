@@ -16,19 +16,28 @@ export class ApiClient {
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     let response: Response;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
     try {
       response = await this.fetcher(`${this.baseUrl}${path}`, {
         ...init,
+        signal: init?.signal || controller.signal,
         headers: { Accept: "application/json", "Content-Type": "application/json", ...init?.headers },
       });
     } catch (error) {
+      if ((error instanceof DOMException && error.name === "AbortError") || (error instanceof Error && error.name === "AbortError")) {
+        throw new ApiError(`Asiyst API request timed out after 10 seconds: ${this.baseUrl}${path}. Check your connection and try again.`);
+      }
       throw new ApiError(`Unable to reach Asiyst API at ${this.baseUrl}${path}. Check your internet connection, DNS, TLS/HTTPS, or whether the service is unavailable.`);
+    } finally {
+      clearTimeout(timeout);
     }
     const body: unknown = await response.json().catch(() => undefined);
     if (!response.ok) {
-      const detail = response.status === 401 ? "Authentication is required." :
-        response.status === 403 ? "The request is not authorized." :
-          response.status === 404 ? "The requested resource was not found." :
+      const detail = response.status === 400 ? "The request data was invalid." :
+        response.status === 401 ? "Authentication is required. Please connect your Asiyst account." :
+        response.status === 403 ? "You are not authorized to perform this operation." :
+          response.status === 404 ? `The API endpoint was not found: ${this.baseUrl}${path}. Please update Asiyst CLI or contact support.` :
             response.status === 409 ? "The request conflicts with the current project state." :
             response.status === 422 ? "The request data was invalid." :
               response.status === 429 ? "Too many requests; try again shortly." :
