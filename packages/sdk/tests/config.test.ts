@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { fallbackConfig, normalizeProjectConfig, validateInitOptions } from "../src/config/schema";
 import { ConfigurationError } from "../src/errors";
+import { SDK_VERSION } from "../src/core/constants";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 describe("configuration", () => {
+  it("keeps SDK_VERSION aligned with package.json", () => {
+    const pkgPath = resolve(process.cwd(), "package.json");
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { version: string };
+    expect(SDK_VERSION).toBe(pkg.version);
+  });
+
   it("rejects missing credentials", () => {
     expect(() => validateInitOptions({})).toThrow(ConfigurationError);
     expect(() => validateInitOptions({ projectId: "p" })).toThrow(/publicKey/);

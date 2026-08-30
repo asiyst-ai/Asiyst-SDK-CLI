@@ -1,5 +1,9 @@
-export const SDK_VERSION = "0.1.5";
-export const DEFAULT_API_BASE_URL = "https://asiyst.com/api/v1";
+declare const __ASIYST_SDK_VERSION__: string | undefined;
+
+export const SDK_VERSION = typeof __ASIYST_SDK_VERSION__ === "string" && __ASIYST_SDK_VERSION__
+  ? __ASIYST_SDK_VERSION__
+  : "0.1.6";
+export const DEFAULT_API_BASE_URL = "https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api";
 export const CONFIG_SCHEMA_VERSION = 1;
 export const HOST_ELEMENT_ID = "asiyst-host";
 export const DATA_ATTR = "data-asiyst";

@@ -7,10 +7,10 @@ export interface SelectorOption<T> {
   disabled?: boolean;
 }
 
-export type SelectorResult<T> = { type: "selected"; value: T; input: string } | { type: "cancelled" | "exit"; input: string };
+export type SelectorResult<T> = { type: "selected"; value: T } | { type: "cancelled" | "exit" };
 
-const width = () => Math.max(40, (stdout.columns || 80) - 2);
-const fit = (value: string) => value.length > width() ? `${value.slice(0, width() - 1)}…` : value;
+const HIDE_CURSOR = "\x1B[?25l";
+const SHOW_CURSOR = "\x1B[?25h";
 
 export function moveSelection(active: number, optionCount: number, direction: "up" | "down"): number {
   if (optionCount === 0) return 0;
@@ -20,104 +20,98 @@ export function moveSelection(active: number, optionCount: number, direction: "u
 }
 
 export function clearSelectorFrame(output: NodeJS.WriteStream, previousLineCount: number): void {
-  if (previousLineCount === 0) return;
-  moveCursor(output, 0, -previousLineCount);
+  if (previousLineCount <= 0) return;
+  cursorTo(output, 0);
+  for (let i = 0; i < previousLineCount - 1; i += 1) {
+    moveCursor(output, 0, -1);
+  }
   for (let line = 0; line < previousLineCount; line += 1) {
     cursorTo(output, 0);
     clearLine(output, 0);
-    if (line < previousLineCount - 1) moveCursor(output, 0, 1);
+    if (line < previousLineCount - 1) {
+      moveCursor(output, 0, 1);
+    }
   }
   cursorTo(output, 0);
+  for (let i = 0; i < previousLineCount - 1; i += 1) {
+    moveCursor(output, 0, -1);
+  }
 }
 
 export function renderSelectorFrame(output: NodeJS.WriteStream, previousLineCount: number, lines: string[]): number {
-  clearSelectorFrame(output, previousLineCount);
-  output.write(lines.join("\n"));
-  output.write("\n");
+  if (lines.length === 0) return 0;
+  if (previousLineCount > 0) {
+    cursorTo(output, 0);
+    for (let i = 0; i < previousLineCount - 1; i += 1) {
+      moveCursor(output, 0, -1);
+    }
+  }
+  for (let i = 0; i < lines.length; i += 1) {
+    cursorTo(output, 0);
+    clearLine(output, 0);
+    output.write(lines[i]);
+    if (i < lines.length - 1) {
+      output.write("\n");
+    }
+  }
   return lines.length;
 }
 
-export function selectOption<T>(title: string, options: SelectorOption<T>[], prompt = "> "): Promise<SelectorResult<T>> {
-  if (!stdin.isTTY || !stdout.isTTY) return Promise.resolve({ type: "cancelled", input: "" });
+function restoreTerminal(wasRaw: boolean): void {
+  stdout.write(SHOW_CURSOR);
+  if (stdin.isTTY) stdin.setRawMode?.(wasRaw);
+}
+
+export function selectOption<T>(title: string, options: SelectorOption<T>[]): Promise<SelectorResult<T>> {
+  if (!stdin.isTTY || !stdout.isTTY) return Promise.resolve({ type: "cancelled" });
   return new Promise((resolve) => {
-    let input = "";
     let active = 0;
-    let visible = true;
     let renderedLines = 0;
     let settled = false;
-    const filtered = () => {
-      const query = input.trim().toLowerCase();
-      return query ? options.filter((option) => option.label.toLowerCase().includes(query) || String(option.value).toLowerCase().includes(query)) : options;
-    };
-    const clear = () => {
-      clearSelectorFrame(stdout, renderedLines);
-      renderedLines = 0;
-    };
-    const render = () => {
-      clear();
-      const matches = filtered();
-      if (active >= matches.length) active = Math.max(0, matches.length - 1);
-      const lines = [`${title}`, `${prompt}${fit(input)}`];
-      if (visible) {
-        if (matches.length === 0) lines.push("  No matching commands.");
-        else lines.push(...matches.map((option, index) => `${index === active ? "❯" : " "} ${fit(option.label)}`));
-        lines.push("↑↓ Navigate  Enter Select  Esc Cancel");
-      }
-      renderedLines = renderSelectorFrame(stdout, renderedLines, lines);
-    };
-    const finish = (result: SelectorResult<T>) => {
+    const wasRaw = Boolean(stdin.isRaw);
+    const enabled = options.filter((option) => !option.disabled);
+
+    const finish = (result: SelectorResult<T>, confirmation?: string) => {
       if (settled) return;
       settled = true;
       stdin.off("keypress", onKeypress);
-      clear();
-      stdin.setRawMode?.(false);
+      clearSelectorFrame(stdout, renderedLines);
+      restoreTerminal(wasRaw);
       stdin.pause();
-      stdout.write("\n");
+      if (confirmation) stdout.write(`${confirmation}\n`);
       resolve(result);
     };
-    const onKeypress = (value: string, key: { name?: string; ctrl?: boolean; sequence?: string }) => {
-      if (key.ctrl && key.name === "c") return finish({ type: "cancelled", input });
-      if (key.ctrl && key.name === "d") return finish({ type: "exit", input });
-      if (key.name === "escape") {
-        return finish({ type: "cancelled", input });
+
+    const render = () => {
+      const lines = [title, "", ...enabled.map((option, index) => `${index === active ? "❯" : " "} ${option.label}`)];
+      renderedLines = renderSelectorFrame(stdout, renderedLines, lines);
+    };
+
+    const onKeypress = (_value: string, key: { name?: string; ctrl?: boolean; sequence?: string } | undefined) => {
+      if (!key) return;
+      if (key.ctrl && key.name === "c") {
+        clearSelectorFrame(stdout, renderedLines);
+        restoreTerminal(wasRaw);
+        stdin.pause();
+        stdout.write("\n");
+        process.exit(130);
       }
+      if (key.name === "escape") return finish({ type: "cancelled" });
       if (key.name === "up" || key.name === "down") {
-        const matches = filtered();
-        if (matches.length > 0) {
-          active = moveSelection(active, matches.length, key.name);
-        }
-        visible = true;
+        active = moveSelection(active, enabled.length, key.name);
         return render();
       }
       if (key.name === "return" || key.name === "enter") {
-        const matches = filtered();
-        const selected = matches[active];
-        if (selected) return finish({ type: "selected", value: selected.value, input });
-        return finish({ type: "cancelled", input });
-      }
-      if (key.name === "tab") {
-        const matches = filtered();
-        if (matches.length === 1) input = matches[0].value as unknown as string;
-        else if (matches.length > 1) active = (active + 1) % matches.length;
-        visible = true;
-        return render();
-      }
-      if (key.name === "backspace") {
-        input = input.slice(0, -1);
-        visible = true;
-        return render();
-      }
-      const sequence = key.sequence || value;
-      if (/^[\x20-\x7e]+$/.test(sequence)) {
-        input += sequence;
-        active = 0;
-        visible = true;
-        return render();
+        const selected = enabled[active];
+        if (!selected) return finish({ type: "cancelled" });
+        return finish({ type: "selected", value: selected.value }, `✓ ${selected.label} selected.`);
       }
     };
+
     emitKeypressEvents(stdin);
     stdin.setRawMode?.(true);
     stdin.resume();
+    stdout.write(HIDE_CURSOR);
     stdin.on("keypress", onKeypress);
     render();
   });

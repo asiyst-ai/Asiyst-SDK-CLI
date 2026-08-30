@@ -7,7 +7,7 @@ Monorepo:
 - `packages/sdk` — browser runtime published as `@asiyst/sdk`
 - `packages/cli` — Node CLI published as `@asiyst/cli` with the `asiyst` binary
 
-The CLI is not bundled into the browser SDK. The production API is served by the web application at `https://asiyst.com/api/v1`.
+The CLI is not bundled into the browser SDK. The production API is served at `https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api`; `https://asiyst.com` is reserved for web application flows.
 
 ## 2. Module responsibilities
 

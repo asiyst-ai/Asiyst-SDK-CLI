@@ -12,5 +12,10 @@ describe("project detection", () => {
     expect(project.sdkVersion).toBe("^1.2.0");
     expect(project.framework).toBe("Next.js");
   });
-  it("falls back to vanilla", () => expect(detectFramework("C:\\missing", null)).toBe("Vanilla JavaScript/TypeScript"));
+  it("detects vanilla JavaScript when package.json has no framework", () => {
+    const dir = mkdtempSync(join(tmpdir(), "asiyst-"));
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "site" }));
+    expect(detectFramework(dir, { name: "site" })).toBe("Vanilla JavaScript");
+  });
+  it("reports unknown projects when no package.json is present", () => expect(detectFramework("C:\\missing", null)).toBe("Unknown"));
 });

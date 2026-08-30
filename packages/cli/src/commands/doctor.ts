@@ -1,18 +1,27 @@
 import { ApiClient } from "../api/client.js";
+import { loadConnection } from "../config/credentials.js";
 import { detectProject } from "../detection/project.js";
 import { ok, fail } from "../ui/output.js";
-export async function doctorCommand(cwd = process.cwd(), api = new ApiClient()): Promise<void> {
-  const project = detectProject(cwd);
+import { CLI_API_BASE_URL, VERIFY_KEY_URL } from "../config/api.js";
+import { readCurrentVersion } from "../config/version.js";
+import { createApiClient } from "./shared.js";
+
+export async function doctorCommand(cwd = process.cwd(), api: ApiClient = createApiClient()): Promise<void> {
+  ok("CLI version", readCurrentVersion());
+  ok("Executable", process.argv[1] || "unknown");
+  ok("API base", api.baseUrl || CLI_API_BASE_URL);
+  ok("Verify endpoint", VERIFY_KEY_URL);
   ok("System", process.platform);
   ok("Node.js", process.version);
-  ok("npm", "available through npm");
+  const project = detectProject(cwd);
   project.packageJson ? ok("Project", cwd) : fail("Project", "package.json is missing");
   project.sdkVersion ? ok("SDK", project.sdkVersion) : fail("SDK", "not installed");
-  project.config.projectId && project.config.publicKey ? ok("Configuration") : fail("Configuration", "public project values are missing");
-  try { await api.health(); ok("Asiyst API", "HTTPS health endpoint reachable"); }
-  catch (error) { fail("Asiyst API", error instanceof Error ? error.message : "unreachable"); }
-  if (project.config.projectId && project.config.publicKey) {
-    try { await api.projectInfo(project.config.projectId); ok("Project connection"); }
-    catch (error) { fail("Project connection", error instanceof Error ? error.message : "unavailable"); }
+  const stored = await loadConnection(cwd);
+  stored ? ok("Local credential", "present") : fail("Local credential", "not connected");
+  try {
+    await api.health();
+    ok("Asiyst API", "health endpoint reachable");
+  } catch (error) {
+    fail("Asiyst API", error instanceof Error ? error.message : "unreachable");
   }
 }

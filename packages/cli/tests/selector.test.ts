@@ -25,6 +25,7 @@ describe("selector rendering", () => {
 
     expect(secondFrame).toBe(firstFrame);
     expect(output).not.toContain("\x1b[2J");
+    expect((output.match(/\x1b\[1A/g) ?? []).length).toBe(2);
     expect(output).toContain("\x1b[2K");
     expect(output).toContain("> second");
   });

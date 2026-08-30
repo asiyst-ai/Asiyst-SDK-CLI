@@ -1,5 +1,3 @@
-export type SessionState = "pending" | "authenticated" | "project_selected" | "completed" | "expired" | "cancelled";
-
 export interface ProjectDetection {
   cwd: string;
   packageJson: Record<string, unknown> | null;
@@ -10,16 +8,18 @@ export interface ProjectDetection {
   config: { projectId?: string; publicKey?: string };
 }
 
-export interface CliSession {
-  sessionId: string;
-  connectUrl: string;
-  expiresAt: string;
-}
-
 export interface VerificationResult {
   name: string;
   ok: boolean;
   detail?: string;
+}
+
+export interface ConnectedProject {
+  projectId: string;
+  projectName?: string;
+  website?: string;
+  publicKey?: string;
+  apiKey: string;
 }
 
 export interface SafeProjectInfo {
@@ -31,4 +31,12 @@ export interface SafeProjectInfo {
   avatarStatus?: string;
   publishedConfigurationStatus?: string;
   publicKey?: string;
+}
+
+export interface ProjectMetadata {
+  projectId?: string;
+  projectName?: string;
+  website?: string;
+  publicKey?: string;
+  connected?: boolean;
 }

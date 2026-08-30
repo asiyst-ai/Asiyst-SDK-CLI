@@ -2,12 +2,21 @@
 
 Developer tools for connecting a website to Asiyst:
 
-- **`@asiyst/sdk`** is a browser runtime that renders and controls an Asiyst avatar, inspects safe page metadata, resolves website targets, runs guided tasks, and communicates with the Asiyst API.
-- **`@asiyst/cli`** is the Node.js command-line tool published with the `asiyst` executable. It detects a local project, manages folder trust, opens browser authentication, checks installation state, and launches dashboard/avatar workflows.
+- **`@asiyst/sdk`** is the browser runtime that renders and controls an Asiyst avatar, inspects safe page metadata, resolves website targets, runs guided tasks, and communicates with the Asiyst API.
+- **`@asiyst/cli`** is the Node.js command-line tool published with the `asiyst` executable. It detects a local project, manages folder trust, opens browser authentication (`https://asiyst.com`), verifies API keys, checks status, and manages connection information.
 
 The packages live in this single monorepo. The CLI does not bundle the SDK, and the SDK does not contain the CLI.
 
-> **Current production limitation:** `GET https://asiyst.com/api/v1/health` is available, but the currently deployed `POST https://asiyst.com/api/v1/cli/sessions` route has returned HTTP 404 during production verification. Until the web application deploys the session contract, `asiyst connect` cannot complete browser authorization. The CLI reports this failure rather than claiming a connection.
+> **Current package versions:** `@asiyst/sdk` `0.1.6` and `@asiyst/cli` `1.1.0`.
+>
+> **Production API:** `https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api` is the active production API base URL for both CLI and SDK.
+
+## Quick facts
+
+- Monorepo: `packages/sdk` + `packages/cli`
+- Local project detection: project type, framework, package manager, and SDK presence
+- Guided onboarding: folder trust + browser-based connection flow
+- Secure-by-default pattern: public project identifiers are used for browser-side initialization; private credentials are not printed or uploaded from the terminal
 
 ## Contents
 
@@ -37,12 +46,14 @@ The packages live in this single monorepo. The CLI does not bundle the SDK, and 
 ```text
 Developer website
       │
-      ├── @asiyst/sdk ── HTTPS ── https://asiyst.com/api/v1
+      ├── @asiyst/sdk ── HTTPS ── https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api
       │                         └── project configuration, heartbeat,
       │                             tasks, conversations, analytics
       │
-      └── Asiyst CLI ── browser session ── https://asiyst.com
-                                  └── project selection/connection
+      └── Asiyst CLI ──── HTTP ─── https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api
+                           │       └── /v1/auth/verify-key, /v1/health
+                           │
+                           └── browser ── https://asiyst.com (API Key creation)
 ```
 
 The intended flow is:
@@ -104,7 +115,7 @@ npm install -g @asiyst/cli
 asiyst --help
 ```
 
-The CLI package currently declares version `1.0.8` and provides:
+The CLI package currently declares version `1.1.0` and provides:
 
 ```json
 {

@@ -14,15 +14,23 @@ function dependencyVersion(pkg: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
+function hasDependency(deps: Record<string, unknown>, name: string): boolean {
+  return typeof deps[name] === "string";
+}
+
 export function detectFramework(cwd: string, pkg: Record<string, unknown> | null): string {
   const deps: Record<string, unknown> = Object.assign({}, pkg?.dependencies, pkg?.devDependencies);
-  if (typeof deps.next === "string") return "Next.js";
-  if (typeof deps.react === "string") return "React";
-  if (typeof deps.vite === "string") return "Vite";
-  if (typeof deps.vue === "string") return "Vue";
-  if (existsSync(resolve(cwd, "vite.config.ts")) || existsSync(resolve(cwd, "vite.config.js"))) return "Vite";
-  if (existsSync(resolve(cwd, "next.config.js")) || existsSync(resolve(cwd, "next.config.mjs"))) return "Next.js";
-  return "Vanilla JavaScript/TypeScript";
+  if (hasDependency(deps, "next") || existsSync(resolve(cwd, "next.config.js")) || existsSync(resolve(cwd, "next.config.mjs")) || existsSync(resolve(cwd, "next.config.ts"))) {
+    return "Next.js";
+  }
+  if (hasDependency(deps, "nuxt")) return "Nuxt";
+  if (hasDependency(deps, "vue") || existsSync(resolve(cwd, "vue.config.js"))) return "Vue";
+  if (hasDependency(deps, "react")) return "React";
+  if (hasDependency(deps, "vite") || existsSync(resolve(cwd, "vite.config.ts")) || existsSync(resolve(cwd, "vite.config.js")) || existsSync(resolve(cwd, "vite.config.mjs"))) {
+    return "Vite";
+  }
+  if (pkg) return existsSync(resolve(cwd, "tsconfig.json")) ? "Vanilla TypeScript" : "Vanilla JavaScript";
+  return "Unknown";
 }
 
 export function detectProject(cwd = process.cwd()): ProjectDetection {
@@ -36,7 +44,6 @@ export function detectProject(cwd = process.cwd()): ProjectDetection {
       packageJson = null;
     }
   }
-  // Never inspect dotenv files; public project values can be supplied by the invoking environment.
   const env = process.env as Record<string, string | undefined>;
   const packageManager = existsSync(resolve(cwd, "pnpm-lock.yaml")) ? "pnpm" :
     existsSync(resolve(cwd, "yarn.lock")) ? "yarn" :

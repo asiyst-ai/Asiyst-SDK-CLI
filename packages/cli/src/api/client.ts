@@ -1,96 +1,91 @@
-import type { CliSession, SafeProjectInfo, SessionState, VerificationResult } from "../types.js";
-import { CLI_API_BASE_URL } from "../config/api.js";
+import { CLI_API_BASE_URL, REQUEST_TIMEOUT_MS, isDebugEnabled, resolveApiBaseUrl } from "../config/api.js";
+import { ApiError, errorCodeFromStatus } from "./errors.js";
 
-export class ApiError extends Error {
-  constructor(message: string, readonly status?: number) {
-    super(message);
-    this.name = "ApiError";
-  }
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function bodyErrorCode(body: unknown): string | undefined {
+  const record = asRecord(body);
+  const code = record?.code ?? record?.errorCode ?? asRecord(record?.error)?.code;
+  return typeof code === "string" ? code : undefined;
+}
+
+function isAbortError(error: unknown): boolean {
+  return (error instanceof DOMException && error.name === "AbortError")
+    || (error instanceof Error && error.name === "AbortError");
 }
 
 export class ApiClient {
   readonly baseUrl: string;
-  constructor(baseUrl = process.env.ASIIYST_API_URL || CLI_API_BASE_URL, private readonly fetcher: typeof fetch = fetch) {
+
+  constructor(baseUrl = resolveApiBaseUrl(), private readonly fetcher: typeof fetch = fetch) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
   }
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    let response: Response;
+  async request<T>(path: string, init?: RequestInit): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const headers = new Headers(init?.headers);
+    headers.set("Accept", "application/json");
+    if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    let response: Response;
     try {
-      response = await this.fetcher(`${this.baseUrl}${path}`, {
+      response = await this.fetcher(url, {
         ...init,
+        headers,
         signal: init?.signal || controller.signal,
-        headers: { Accept: "application/json", "Content-Type": "application/json", ...init?.headers },
       });
     } catch (error) {
-      if ((error instanceof DOMException && error.name === "AbortError") || (error instanceof Error && error.name === "AbortError")) {
-        throw new ApiError(`Asiyst API request timed out after 10 seconds: ${this.baseUrl}${path}. Check your connection and try again.`);
+      if (isAbortError(error)) {
+        throw new ApiError("Connection to Asiyst timed out.", undefined, "TIMEOUT");
       }
-      throw new ApiError(`Unable to reach Asiyst API at ${this.baseUrl}${path}. Check your internet connection, DNS, TLS/HTTPS, or whether the service is unavailable.`);
+      throw new ApiError("Unable to reach Asiyst API.", undefined, "NETWORK");
     } finally {
       clearTimeout(timeout);
     }
-    const body: unknown = await response.json().catch(() => undefined);
+
+    const rawText = await response.text();
+    let body: unknown;
+    if (rawText) {
+      try {
+        body = JSON.parse(rawText) as unknown;
+      } catch {
+        body = undefined;
+      }
+    }
+
     if (!response.ok) {
-      const detail = response.status === 400 ? "The request data was invalid." :
-        response.status === 401 ? "Authentication is required. Please connect your Asiyst account." :
-        response.status === 403 ? "You are not authorized to perform this operation." :
-          response.status === 404 ? `The API endpoint was not found: ${this.baseUrl}${path}. Please update Asiyst CLI or contact support.` :
-            response.status === 409 ? "The request conflicts with the current project state." :
-            response.status === 422 ? "The request data was invalid." :
-              response.status === 429 ? "Too many requests; try again shortly." :
-                response.status >= 500 ? "Asiyst is temporarily unavailable." : "The request was rejected.";
-      throw new ApiError(`Asiyst API returned HTTP ${response.status}. ${detail}`, response.status);
+      const code = errorCodeFromStatus(response.status, bodyErrorCode(body));
+      if (code === "API_KEY_REVOKED" || bodyErrorCode(body) === "API_KEY_REVOKED") {
+        throw new ApiError("This API key has been revoked.", response.status, "API_KEY_REVOKED");
+      }
+      throw new ApiError(`Asiyst API returned HTTP ${response.status}.`, response.status, code);
     }
-    if (body === undefined) {
-      throw new ApiError(`Asiyst API returned an invalid JSON response (HTTP ${response.status}).`, response.status);
+
+    if (rawText && body === undefined) {
+      if (isDebugEnabled()) {
+        throw new ApiError("Asiyst API returned an invalid JSON response.", response.status, "MALFORMED_RESPONSE");
+      }
+      throw new ApiError("Received an unexpected response from Asiyst.", response.status, "MALFORMED_RESPONSE");
     }
-    return body as T;
+
+    return (body === undefined ? {} : body) as T;
   }
 
-  health(): Promise<{ status?: string }> {
-    return this.request<unknown>("/health").then((body) => {
-      if (!body || typeof body !== "object" || Array.isArray(body)) {
-        throw new ApiError("Asiyst API health endpoint returned an invalid response.");
-      }
-      return body as { status?: string };
-    });
-  }
-
-  createSession(): Promise<CliSession> {
-    return this.request<unknown>("/cli/sessions", { method: "POST", body: JSON.stringify({}) }).then((value) => {
-      if (!value || typeof value !== "object") throw new ApiError("Asiyst returned an invalid session response");
-      const session = value as Record<string, unknown>;
-      if (typeof session.sessionId !== "string" || typeof session.connectUrl !== "string" || typeof session.expiresAt !== "string") {
-        throw new ApiError("Asiyst returned an invalid session response");
-      }
-      const url = new URL(session.connectUrl);
-      if (url.protocol !== "https:") {
-        throw new ApiError("Asiyst returned an insecure connection URL");
-      }
-      return { sessionId: session.sessionId, connectUrl: url.toString(), expiresAt: session.expiresAt };
-    });
-  }
-
-  sessionStatus(sessionId: string): Promise<{ state: SessionState; project?: SafeProjectInfo }> {
-    return this.request(`/cli/sessions/${encodeURIComponent(sessionId)}/status`);
-  }
-
-  projectInfo(projectId: string): Promise<SafeProjectInfo> {
-    return this.request(`/cli/projects/${encodeURIComponent(projectId)}`);
-  }
-
-  verify(projectId: string, publicKey: string, domain?: string): Promise<VerificationResult[]> {
-    return this.request<unknown>("/cli/verification", {
-      method: "POST",
-      body: JSON.stringify({ projectId, publicKey, domain }),
-    }).then((value) => {
-      if (!Array.isArray(value) || !value.every((item) => item && typeof item === "object" && typeof (item as Record<string, unknown>).name === "string" && typeof (item as Record<string, unknown>).ok === "boolean")) {
-        throw new ApiError("Asiyst returned an invalid verification response");
-      }
-      return value as VerificationResult[];
-    });
+  async health(): Promise<{ status?: string }> {
+    try {
+      const body = await this.request<unknown>("/health");
+      const record = asRecord(body);
+      if (record) return record as { status?: string };
+    } catch {
+      const body = await this.request<unknown>("/v1/health");
+      const record = asRecord(body);
+      if (record) return record as { status?: string };
+    }
+    throw new ApiError("Received an unexpected response from Asiyst.", 200, "MALFORMED_RESPONSE");
   }
 }
+
+export { ApiError, CLI_API_BASE_URL };

@@ -16,6 +16,9 @@ const visibleRect = {
   toJSON() {},
 } as DOMRect;
 
+// jsdom reports 0x0 rectangles for synthetic elements. Visibility checks require a non-zero box,
+// so tests stub getBoundingClientRect rather than relying on layout.
+
 describe("target resolution", () => {
   beforeEach(() => {
     HTMLElement.prototype.getBoundingClientRect = () => visibleRect;

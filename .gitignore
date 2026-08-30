@@ -11,3 +11,7 @@ coverage/
 *.tsbuildinfo
 .idea/
 .vscode/
+.asiyst/
+.asiyst/credentials.json
+.asiyst/credentials.dpapi
+credentials.dpapi

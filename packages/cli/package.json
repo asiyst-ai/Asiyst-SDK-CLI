@@ -1,7 +1,7 @@
 {
   "name": "@asiyst/cli",
-  "version": "1.0.8",
-  "description": "Connect and verify Asiyst SDK projects",
+  "version": "1.1.0",
+  "description": "Connect a local website project to Asiyst",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -12,6 +12,22 @@
     "README.md",
     "LICENSE"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/asiyst-ai/Asiyst-SDK-CLI.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://asiyst.com",
+  "bugs": {
+    "url": "https://github.com/asiyst-ai/Asiyst-SDK-CLI/issues"
+  },
+  "keywords": [
+    "asiyst",
+    "cli"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",

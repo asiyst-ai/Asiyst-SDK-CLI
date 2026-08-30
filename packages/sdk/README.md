@@ -41,7 +41,7 @@ Mark important controls so the assistant can find them across layouts:
 </button>
 ```
 
-The production API base is `https://asiyst.com/api/v1`. It is used by default and can only be overridden explicitly through `apiBaseUrl` for a controlled non-production deployment.
+The production API base is `https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api`. It is used by default and can only be overridden explicitly through `apiBaseUrl` for a controlled non-production deployment.
 
 If Cloud is unreachable, the SDK keeps a fallback avatar configuration and exposes `getConnectionStatus()` as `offline`. Conversation replies and task plans are not invented locally; those requests fail until Cloud responds.
 
