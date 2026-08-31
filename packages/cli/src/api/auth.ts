@@ -1,4 +1,4 @@
-import type { ConnectedProject } from "../types.js";
+﻿import type { ConnectedProject } from "../types.js";
 import { VERIFY_KEY_PATH } from "../config/api.js";
 import { ApiClient } from "./client.js";
 import { ApiError } from "./errors.js";
@@ -37,14 +37,14 @@ export function parseVerifyKeyResponse(value: unknown, apiKey: string): Connecte
   const project = projectFromBody(body);
   if (!project) throw new ApiError("Received an unexpected response from Asiyst.", 200, "MALFORMED_RESPONSE");
 
-  const projectId = project.projectId ?? project.id;
+  const projectId = project.projectId ?? project.project_id ?? project.id ?? project.projectID;
   if (typeof projectId !== "string" || !projectId.trim()) {
     throw new ApiError("Received an unexpected response from Asiyst.", 200, "MALFORMED_RESPONSE");
   }
 
-  const website = project.website ?? project.websiteUrl ?? project.url ?? project.domain;
-  const projectName = project.projectName ?? project.name;
-  const publicKey = project.publicKey ?? project.publishableKey;
+  const website = project.website ?? project.websiteUrl ?? project.url ?? project.domain ?? project.website_url;
+  const projectName = project.projectName ?? project.name ?? project.title;
+  const publicKey = project.publicKey ?? project.public_key ?? project.publishableKey;
 
   return {
     projectId: projectId.trim(),
@@ -60,8 +60,11 @@ export async function verifyApiKey(api: ApiClient, apiKey: string): Promise<Conn
   if (!token) throw new ApiError("Invalid API key.", 401, "INVALID_API_KEY");
   const value = await api.request<unknown>(VERIFY_KEY_PATH, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify({}),
+    headers: {
+      Authorization: "Bearer " + token,
+      "X-Asiyst-API-Key": token,
+    },
+    body: JSON.stringify({ apiKey: token }),
   });
   return parseVerifyKeyResponse(value, token);
 }

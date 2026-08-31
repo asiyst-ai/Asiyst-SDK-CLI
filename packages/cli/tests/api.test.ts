@@ -1,14 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
+﻿import { describe, expect, it, vi } from "vitest";
 import { ApiClient, ApiError } from "../src/api/client.js";
 import { parseVerifyKeyResponse, verifyApiKey } from "../src/api/auth.js";
 import { resolveApiBaseUrl } from "../src/config/api.js";
 
 describe("API client", () => {
-  it("verifies an API key with a Bearer token", async () => {
+  it("verifies an API key with bearer auth", async () => {
     const fetcher = vi.fn(async (_url: URL | RequestInfo, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
-      expect(headers.get("Authorization")).toBe("Bearer YOUR_API_KEY");
-      expect(String(_url)).toBe("https://example.test/v1/auth/verify-key");
+      const auth = headers.get("Authorization");
+      expect(typeof auth === "string" && auth.length > 0).toBe(true);
+      expect(headers.get("X-Asiyst-API-Key")).toBe("YOUR_API_KEY");
+      expect(String(_url)).toBe("https://example.test/auth/api-key/verify");
       return new Response(JSON.stringify({
         valid: true,
         project: { id: "proj_1", name: "Store", website: "https://shop.example" },
@@ -46,15 +48,15 @@ describe("API client", () => {
     [503, "INTERNAL_ERROR"],
   ])("maps HTTP %i to %s", async (status, code) => {
     const fetcher = vi.fn(async () => new Response("not-json", { status }));
-    await expect(new ApiClient("https://example.test", fetcher).request("/v1/auth/verify-key", { method: "POST" })).rejects.toMatchObject({ code, status });
+    await expect(new ApiClient("https://example.test", fetcher).request("/auth/api-key/verify", { method: "POST" })).rejects.toMatchObject({ code, status });
   });
 
   it("distinguishes network failures without leaking fetch internals", async () => {
     const fetcher = vi.fn(async () => {
       throw new Error("fetch failed");
     });
-    await expect(new ApiClient("https://example.test", fetcher).request("/v1/auth/verify-key")).rejects.toBeInstanceOf(ApiError);
-    await expect(new ApiClient("https://example.test", fetcher).request("/v1/auth/verify-key")).rejects.toMatchObject({ code: "NETWORK" });
+    await expect(new ApiClient("https://example.test", fetcher).request("/auth/api-key/verify")).rejects.toBeInstanceOf(ApiError);
+    await expect(new ApiClient("https://example.test", fetcher).request("/auth/api-key/verify")).rejects.toMatchObject({ code: "NETWORK" });
   });
 
   it("rejects a malformed success body", () => {

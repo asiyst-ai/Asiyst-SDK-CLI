@@ -1,9 +1,18 @@
 export const PRODUCTION_API_ORIGIN = "https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api";
 export const CLI_API_BASE_URL = PRODUCTION_API_ORIGIN;
-export const VERIFY_KEY_PATH = "/v1/auth/verify-key";
+export const VERIFY_KEY_PATH = "/auth/api-key/verify";
 export const VERIFY_KEY_URL = `${CLI_API_BASE_URL}${VERIFY_KEY_PATH}`;
-export const ASIIYST_WEB_URL = "https://asiyst.com";
+export const ASIYST_WEB_URL = "https://asiyst.com";
+export const ASIIYST_WEB_URL = ASIYST_WEB_URL;
 export const REQUEST_TIMEOUT_MS = 15_000;
+
+function readEnv(env: NodeJS.ProcessEnv, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = env[key]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
 
 function isLocalUrl(value: string): boolean {
   try {
@@ -15,17 +24,20 @@ function isLocalUrl(value: string): boolean {
 }
 
 export function resolveApiBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
-  const explicit = env.ASIIYST_API_URL?.trim();
-  const development = env.ASIIYST_API_MODE === "development";
-  if (explicit && development) {
+  const explicit = readEnv(env, "ASIYST_API_URL", "ASIIYST_API_URL");
+  const development = readEnv(env, "ASIYST_API_MODE", "ASIIYST_API_MODE") === "development";
+  if (explicit) {
     if (isLocalUrl(explicit)) {
       return CLI_API_BASE_URL;
     }
     return explicit.replace(/\/+$/, "");
   }
+  if (development) {
+    return CLI_API_BASE_URL;
+  }
   return CLI_API_BASE_URL;
 }
 
 export function isDebugEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.ASIIYST_DEBUG === "1" || env.ASIIYST_DEBUG === "true";
+  return readEnv(env, "ASIYST_DEBUG", "ASIIYST_DEBUG") === "1" || readEnv(env, "ASIYST_DEBUG", "ASIIYST_DEBUG") === "true";
 }

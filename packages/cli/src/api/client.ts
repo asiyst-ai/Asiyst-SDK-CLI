@@ -80,9 +80,7 @@ export class ApiClient {
       const record = asRecord(body);
       if (record) return record as { status?: string };
     } catch {
-      const body = await this.request<unknown>("/v1/health");
-      const record = asRecord(body);
-      if (record) return record as { status?: string };
+      // The current production API contract exposes the health endpoint at the root of the API base URL.
     }
     throw new ApiError("Received an unexpected response from Asiyst.", 200, "MALFORMED_RESPONSE");
   }

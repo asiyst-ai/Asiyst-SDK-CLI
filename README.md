@@ -51,7 +51,7 @@ Developer website
       │                             tasks, conversations, analytics
       │
       └── Asiyst CLI ──── HTTP ─── https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api
-                           │       └── /v1/auth/verify-key, /v1/health
+                           │       └── /auth/api-key/verify, /health
                            │
                            └── browser ── https://asiyst.com (API Key creation)
 ```
@@ -196,7 +196,7 @@ The selector uses Node's keypress events and restores stdin raw mode when it fin
 3. Detect the framework, language, package manager, and installed SDK dependency.
 4. Stop with an install instruction if `@asiyst/sdk` is not listed in `package.json`.
 5. Ask whether to connect the project.
-6. Call `GET /api/v1/health`.
+6. Call `GET /health` on the production API base URL.
 7. Create a short-lived connection session with `POST /api/v1/cli/sessions`.
 8. Open the server-provided HTTPS `connectUrl` in the browser.
 9. Poll `GET /api/v1/cli/sessions/:sessionId/status`.
@@ -575,7 +575,7 @@ Uninstallation does not remove manually added SDK imports, markup attributes, br
 **Check:**
 
 ```bash
-node -e "fetch('https://asiyst.com/api/v1/health').then(async r => console.log(r.status, r.headers.get('content-type'), await r.text()))"
+node -e "fetch('https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api/health').then(async r => console.log(r.status, r.headers.get('content-type'), await r.text()))"
 ```
 
 The current production health endpoint returns JSON, while the connection session route has returned 404. This must be fixed in the web application before `connect` can complete.
