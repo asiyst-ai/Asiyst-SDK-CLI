@@ -25,6 +25,7 @@ import { createLiveRegion } from "../accessibility/a11y";
 import { debounce } from "../utils/timing";
 import { DOM_SCAN_DEBOUNCE_MS } from "./constants";
 import { isolateAsync, withIsolation } from "./isolate";
+import { validateWebsiteDomain } from "../interaction/permissions";
 
 export class AsiystRuntime {
   readonly events = new EventBus();
@@ -114,6 +115,15 @@ export class AsiystRuntime {
   async start(): Promise<void> {
     this.events.emit("asiyst:initialized", { projectId: this.options.projectId });
     const cfg = await isolateAsync(() => this.config.refresh(), this.config.get());
+    const domainCheck = validateWebsiteDomain(cfg, window.location.href);
+    if (!domainCheck.allowed) {
+      this.connectionStatus = "disconnected";
+      this.events.emit("asiyst:error", {
+        code: "domain_not_authorized",
+        message: "This website is not authorized for the current Asiyst project.",
+      });
+      return;
+    }
     this.avatar.applyConfig(cfg);
     this.avatar.show();
     try {

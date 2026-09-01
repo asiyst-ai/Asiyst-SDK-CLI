@@ -9,6 +9,8 @@ export interface ActionResult {
   ok: boolean;
   waitedForUser: boolean;
   elementId?: string;
+  allowed?: boolean;
+  reason?: string;
 }
 
 export class InteractionEngine {
@@ -27,7 +29,12 @@ export class InteractionEngine {
 
   async execute(step: TaskStep, source: TargetSource): Promise<ActionResult> {
     const config = this.getConfig();
-    assertActionAllowed(step.action, config, source);
+    const currentUrl = this.win.location.href;
+    const target = step.url ?? (typeof step.target === "string" ? step.target : undefined);
+    const allowed = this.evaluatePermission(step.action, config, currentUrl, target, source);
+    if (!allowed.ok) {
+      return { ok: false, waitedForUser: false, allowed: false, reason: allowed.reason ?? "ACTION_NOT_PERMITTED" };
+    }
     const wait = shouldWaitForUser(step.action, config.mode, step.waitForUser);
 
     switch (step.action) {
@@ -57,6 +64,21 @@ export class InteractionEngine {
         return { ok: true, waitedForUser: false };
       default:
         throw new TaskExecutionError("Unsupported action");
+    }
+  }
+
+  private evaluatePermission(
+    action: ActionKind,
+    config: ProjectConfig,
+    currentUrl: string,
+    target: string | undefined,
+    source: TargetSource,
+  ): { ok: boolean; reason?: string } {
+    try {
+      assertActionAllowed(action, config, source, currentUrl, target);
+      return { ok: true };
+    } catch {
+      return { ok: false, reason: "ACTION_NOT_PERMITTED" };
     }
   }
 

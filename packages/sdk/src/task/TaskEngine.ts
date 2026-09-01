@@ -47,6 +47,11 @@ export class TaskEngine {
         this.move(TaskStatus.ActionStarted);
 
         const result = await this.interaction.execute(step, source);
+        if (!result.ok) {
+          this.events.emit("asiyst:task:failed", { taskId: task.id, reason: result.reason ?? "ACTION_NOT_PERMITTED" });
+          this.analytics.track("task_failed", { taskId: task.id });
+          return this.finish(TaskStatus.Failed, result.reason ?? "ACTION_NOT_PERMITTED");
+        }
         if (result.waitedForUser && result.elementId) {
           this.move(TaskStatus.WaitingForUser);
           const clicked = await this.interaction.waitForElementClick(result.elementId, step.timeoutMs ?? 30_000);

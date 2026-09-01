@@ -15,6 +15,7 @@ export { fallbackConfig, normalizeProjectConfig, validateInitOptions } from "./c
 export { isSafeSelector } from "./security/selectors";
 export { sanitizeText } from "./security/sanitize";
 export { computeAvatarDestination, anchorToViewport } from "./utils/geometry";
+export { canNavigateTo, evaluateActionPermission, isActionAllowed, validateWebsiteDomain } from "./interaction/permissions";
 
 export type {
   InitOptions,

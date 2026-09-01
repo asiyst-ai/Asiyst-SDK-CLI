@@ -13,6 +13,9 @@ export type ActionKind =
   | "scroll"
   | "type"
   | "select"
+  | "open"
+  | "close"
+  | "filter"
   | "open-menu"
   | "open-modal"
   | "search"
@@ -27,6 +30,9 @@ export const ALL_ACTION_KINDS: readonly ActionKind[] = [
   "scroll",
   "type",
   "select",
+  "open",
+  "close",
+  "filter",
   "open-menu",
   "open-modal",
   "search",
@@ -97,6 +103,30 @@ export interface BehaviorConfig {
   speechBubble?: boolean;
 }
 
+export interface AvatarRuntimeRule {
+  action?: string;
+  allowed?: boolean;
+  target?: string;
+  route?: string;
+  routes?: string[];
+  domain?: string;
+  domains?: string[];
+  enabled?: boolean;
+  sourceId?: string;
+  dataSourceId?: string;
+}
+
+export interface AvatarDataSource {
+  id: string;
+  name?: string;
+  type?: string;
+  enabled?: boolean;
+  url?: string;
+  method?: string;
+  headers?: Record<string, string>;
+  credentials?: string;
+}
+
 export interface ProjectConfig {
   schemaVersion: number;
   version: number;
@@ -111,6 +141,11 @@ export interface ProjectConfig {
   behavior: BehaviorConfig;
   mode: AssistantMode;
   allowedActions: ActionKind[];
+  allowedDomains: string[];
+  allowedRoutes: string[];
+  blockedRoutes: string[];
+  rules: AvatarRuntimeRule[];
+  dataSources: AvatarDataSource[];
   elementSelectors: Record<string, string>;
 }
 

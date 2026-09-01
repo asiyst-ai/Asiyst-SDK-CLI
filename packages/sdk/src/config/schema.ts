@@ -1,4 +1,4 @@
-import type { ActionKind, AnchorPosition, BehaviorConfig, ProjectConfig, ThemeConfig } from "../types";
+import type { ActionKind, AnchorPosition, AvatarDataSource, AvatarRuntimeRule, BehaviorConfig, ProjectConfig, ThemeConfig } from "../types";
 import { ALL_ACTION_KINDS } from "../types";
 import { ConfigurationError } from "../errors";
 import { CONFIG_SCHEMA_VERSION } from "../core/constants";
@@ -42,6 +42,110 @@ function parseAllowedActions(value: unknown, fallback: ActionKind[]): ActionKind
     }
   }
   return next.length > 0 ? next : [...fallback];
+}
+
+function parseStringList(value: unknown): string[] {
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((item) => sanitizeText(item.trim(), 200))
+      .filter(Boolean);
+  }
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => sanitizeText(item.trim(), 200))
+    .filter(Boolean);
+}
+
+function parseRule(value: unknown): AvatarRuntimeRule | null {
+  if (!isRecord(value)) return null;
+  const action = typeof value.action === "string" ? sanitizeText(value.action, 64) : undefined;
+  if (action && !ALL_ACTION_KINDS.includes(action as ActionKind)) {
+    return null;
+  }
+
+  const routeList = parseStringList(value.routes ?? value.route);
+  const domainList = parseStringList(value.domains ?? value.domain);
+  const hasAllowedValue = typeof value.allowed === "boolean";
+  const hasAnySemanticField =
+    hasAllowedValue ||
+    typeof value.target === "string" ||
+    typeof value.route === "string" ||
+    routeList.length > 0 ||
+    typeof value.domain === "string" ||
+    domainList.length > 0 ||
+    typeof value.enabled === "boolean" ||
+    typeof value.sourceId === "string" ||
+    typeof value.dataSourceId === "string";
+
+  if (!hasAnySemanticField) {
+    return null;
+  }
+
+  const rule: AvatarRuntimeRule = {
+    action,
+    allowed: typeof value.allowed === "boolean" ? value.allowed : undefined,
+    target: typeof value.target === "string" ? sanitizeText(value.target, 200) : undefined,
+    route: typeof value.route === "string" ? sanitizeText(value.route, 200) : undefined,
+    routes: routeList,
+    domain: typeof value.domain === "string" ? sanitizeText(value.domain, 200) : undefined,
+    domains: domainList,
+    enabled: typeof value.enabled === "boolean" ? value.enabled : undefined,
+    sourceId: typeof value.sourceId === "string" ? sanitizeText(value.sourceId, 128) : undefined,
+    dataSourceId: typeof value.dataSourceId === "string" ? sanitizeText(value.dataSourceId, 128) : undefined,
+  };
+
+  if (typeof value.allowed !== "undefined" && typeof value.allowed !== "boolean") {
+    return null;
+  }
+
+  return rule;
+}
+
+function parseRules(value: unknown): AvatarRuntimeRule[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const rules: AvatarRuntimeRule[] = [];
+  for (const entry of value) {
+    const rule = parseRule(entry);
+    if (rule) {
+      rules.push(rule);
+    }
+  }
+  return rules;
+}
+
+function parseDataSources(value: unknown): AvatarDataSource[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const next: AvatarDataSource[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+    const id = typeof entry.id === "string" ? sanitizeText(entry.id, 128) : "";
+    if (!id) continue;
+    next.push({
+      id,
+      name: typeof entry.name === "string" ? sanitizeText(entry.name, 128) : undefined,
+      type: typeof entry.type === "string" ? sanitizeText(entry.type, 64) : undefined,
+      enabled: typeof entry.enabled === "boolean" ? entry.enabled : undefined,
+      url: typeof entry.url === "string" ? sanitizeText(entry.url, 400) : undefined,
+      method: typeof entry.method === "string" ? sanitizeText(entry.method, 20) : undefined,
+      headers: isRecord(entry.headers)
+        ? Object.fromEntries(
+            Object.entries(entry.headers)
+              .filter(([key, item]) => typeof key === "string" && typeof item === "string")
+              .map(([key, item]) => [sanitizeText(key, 64), sanitizeText(item, 200)]),
+          )
+        : undefined,
+      credentials: typeof entry.credentials === "string" ? "[redacted]" : undefined,
+    });
+  }
+  return next;
 }
 
 function parseTheme(value: unknown): ThemeConfig {
@@ -122,6 +226,11 @@ export function fallbackConfig(): ProjectConfig {
     },
     mode: "guided",
     allowedActions: ["navigate", "highlight", "scroll", "wait", "explain", "complete"],
+    allowedDomains: [],
+    allowedRoutes: [],
+    blockedRoutes: [],
+    rules: [],
+    dataSources: [],
     elementSelectors: {},
   };
 }
@@ -150,6 +259,11 @@ export function normalizeProjectConfig(raw: unknown): ProjectConfig {
     behavior: { ...base.behavior, ...parseBehavior(raw.behavior) },
     mode: raw.mode === "assist" ? "assist" : "guided",
     allowedActions: parseAllowedActions(raw.allowedActions, base.allowedActions),
+    allowedDomains: parseStringList(raw.allowedDomains ?? raw.allowed_domains),
+    allowedRoutes: parseStringList(raw.allowedRoutes ?? raw.allowed_routes),
+    blockedRoutes: parseStringList(raw.blockedRoutes ?? raw.blocked_routes),
+    rules: parseRules(raw.rules ?? raw.avatarRules),
+    dataSources: parseDataSources(raw.dataSources ?? raw.enabledDataSources),
     elementSelectors: parseElementSelectors(raw.elementSelectors),
   };
 }
