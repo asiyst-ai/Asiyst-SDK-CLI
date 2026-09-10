@@ -11,4 +11,13 @@ describe("CLI entrypoint", () => {
     expect(output).toHaveBeenCalledWith(readCurrentVersion());
     output.mockRestore();
   });
+
+  it("lists push and clear commands", async () => {
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await main(["help"]);
+    const text = output.mock.calls.flat().join("\n");
+    expect(text).toContain("/push");
+    expect(text).toContain("/clear");
+    output.mockRestore();
+  });
 });

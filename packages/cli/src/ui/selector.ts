@@ -8,6 +8,12 @@ export interface SelectorOption<T> {
 }
 
 export type SelectorResult<T> = { type: "selected"; value: T } | { type: "cancelled" | "exit" };
+type InteractiveSelector = (title: string, options: SelectorOption<unknown>[]) => Promise<unknown | undefined>;
+let interactiveSelector: InteractiveSelector | undefined;
+
+export function setInteractiveSelector(provider: InteractiveSelector | undefined): void {
+  interactiveSelector = provider;
+}
 
 const HIDE_CURSOR = "\x1B[?25l";
 const SHOW_CURSOR = "\x1B[?25h";
@@ -63,6 +69,10 @@ function restoreTerminal(wasRaw: boolean): void {
 }
 
 export function selectOption<T>(title: string, options: SelectorOption<T>[]): Promise<SelectorResult<T>> {
+  if (interactiveSelector) {
+    return interactiveSelector(title, options as SelectorOption<unknown>[]).then((value) =>
+      value === undefined ? { type: "cancelled" } : { type: "selected", value: value as T });
+  }
   if (!stdin.isTTY || !stdout.isTTY) return Promise.resolve({ type: "cancelled" });
   return new Promise((resolve) => {
     let active = 0;

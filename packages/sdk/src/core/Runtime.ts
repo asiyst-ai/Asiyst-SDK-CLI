@@ -47,6 +47,7 @@ export class AsiystRuntime {
   private readonly renderer: CssAvatarRenderer;
   private destroyed = false;
   private connectionStatus: "connected" | "disconnected" | "offline" = "disconnected";
+  private verificationStatus: "connected" | "inactive" | "not_detected" | "error" = "not_detected";
   private readonly rescanDebounced = debounce(() => this.rescan(), DOM_SCAN_DEBOUNCE_MS);
 
   constructor(options: InitOptions, doc: Document, win: Window) {
@@ -58,8 +59,9 @@ export class AsiystRuntime {
       apiBaseUrl: options.apiBaseUrl ?? DEFAULT_API_BASE_URL,
       projectId: options.projectId,
       publicKey: options.publicKey,
+      avatarId: options.avatarId,
     });
-    this.cloud = new CloudClient(transport, options.projectId);
+    this.cloud = new CloudClient(transport, options.projectId, options.publicKey);
     this.config = new ConfigManager(options, this.cloud, this.events);
     this.analytics = new Analytics(options.projectId, this.cloud);
     this.host = new HostRoot(doc);
@@ -118,6 +120,7 @@ export class AsiystRuntime {
     const domainCheck = validateWebsiteDomain(cfg, window.location.href);
     if (!domainCheck.allowed) {
       this.connectionStatus = "disconnected";
+      this.verificationStatus = "not_detected";
       this.events.emit("asiyst:error", {
         code: "domain_not_authorized",
         message: "This website is not authorized for the current Asiyst project.",
@@ -133,14 +136,21 @@ export class AsiystRuntime {
         timestamp: new Date().toISOString(),
       });
       this.connectionStatus = heartbeat.ok ? "connected" : "disconnected";
+      this.verificationStatus = heartbeat.verificationStatus
+        ?? (heartbeat.ok ? "connected" : "not_detected");
     } catch {
       this.connectionStatus = "offline";
+      this.verificationStatus = "error";
     }
     this.events.emit("asiyst:ready", { projectId: this.options.projectId, configVersion: cfg.version });
   }
 
   getConnectionStatus(): "connected" | "disconnected" | "offline" {
     return this.connectionStatus;
+  }
+
+  getVerificationStatus(): "connected" | "inactive" | "not_detected" | "error" {
+    return this.verificationStatus;
   }
 
   getConfig(): ProjectConfig {

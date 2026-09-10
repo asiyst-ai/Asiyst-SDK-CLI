@@ -20,11 +20,23 @@ export interface ConnectedProject {
   website?: string;
   publicKey?: string;
   apiKey: string;
+  userId?: string;
+  avatarId?: string;
+  avatarName?: string;
+}
+
+export interface OnboardingSession {
+  sessionId: string;
+  refreshToken?: string;
+  userId?: string;
+  accountEmail?: string;
+  expiresAt?: string;
 }
 
 export interface SafeProjectInfo {
   projectName?: string;
   projectId?: string;
+  website?: string;
   connectionStatus?: string;
   lastSdkConnection?: string;
   domainStatus?: string;
@@ -38,5 +50,8 @@ export interface ProjectMetadata {
   projectName?: string;
   website?: string;
   publicKey?: string;
+  userId?: string;
+  avatarId?: string;
+  avatarName?: string;
   connected?: boolean;
 }

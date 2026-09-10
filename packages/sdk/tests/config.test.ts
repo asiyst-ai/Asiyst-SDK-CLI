@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { fallbackConfig, normalizeProjectConfig, validateInitOptions } from "../src/config/schema";
-import { ConfigurationError } from "../src/errors";
 import { SDK_VERSION } from "../src/core/constants";
 import { canNavigateTo, isActionAllowed, validateWebsiteDomain } from "../src/interaction/permissions";
 import { readFileSync } from "node:fs";
@@ -13,14 +12,16 @@ describe("configuration", () => {
     expect(SDK_VERSION).toBe(pkg.version);
   });
 
-  it("rejects missing credentials", () => {
-    expect(() => validateInitOptions({})).toThrow(ConfigurationError);
-    expect(() => validateInitOptions({ projectId: "p" })).toThrow(/publicKey/);
+  it("rejects missing or obviously wrong project IDs", () => {
+    expect(() => validateInitOptions({})).toThrow(/projectId is required/i);
+    expect(() => validateInitOptions({ projectId: "", publicKey: "k1" })).toThrow(/projectId is required/i);
+    expect(() => validateInitOptions({ projectId: "67af7387-cb93-47c9-accc-a66381baf619", publicKey: "k1" })).toThrow(/Project ID/i);
   });
 
-  it("trims credentials", () => {
-    expect(validateInitOptions({ projectId: " p1 ", publicKey: " k1 " })).toEqual({
-      projectId: "p1",
+  it("trims credentials and accepts a public project ID", () => {
+    const validProjectId = "K8mP2xQ7_vL4N9cR5T1zB6Y3";
+    expect(validateInitOptions({ projectId: ` ${validProjectId} `, publicKey: " k1 " })).toEqual({
+      projectId: validProjectId,
       publicKey: "k1",
     });
   });

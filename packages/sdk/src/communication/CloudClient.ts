@@ -8,6 +8,7 @@ export class CloudClient {
   constructor(
     private readonly transport: CloudTransport,
     private readonly projectId: string,
+    private readonly publicKey = "",
   ) {}
 
   async fetchConfig(): Promise<ProjectConfig> {
@@ -29,19 +30,34 @@ export class CloudClient {
     origin: string;
     environment: string;
     timestamp: string;
-  }): Promise<{ ok: boolean; status: number }> {
-    const response = await this.transport.request({
+  }): Promise<{ ok: boolean; status: number; verificationStatus?: "connected" | "inactive" | "not_detected" | "error" }> {
+    const response = await this.transport.request<unknown>({
       path: "/sdk/heartbeat",
       method: "POST",
       body: {
-        projectId: this.projectId,
-        sdkVersion: SDK_VERSION,
-        websiteOrigin: metadata.origin,
+        project_id: this.projectId,
+        public_key: this.publicKey,
+        sdk_version: SDK_VERSION,
+        origin: metadata.origin,
         environment: metadata.environment,
         timestamp: metadata.timestamp,
       },
     });
-    return { ok: response.ok, status: response.status };
+    const body = response.data && typeof response.data === "object" && !Array.isArray(response.data)
+      ? response.data as Record<string, unknown>
+      : undefined;
+    const rawStatus = body?.status ?? body?.connectionStatus ?? body?.verificationStatus;
+    const verificationStatus = rawStatus === "connected"
+      || rawStatus === "inactive"
+      || rawStatus === "not_detected"
+      || rawStatus === "error"
+      ? rawStatus
+      : undefined;
+    return {
+      ok: response.ok && (verificationStatus === undefined || verificationStatus === "connected"),
+      status: response.status,
+      verificationStatus,
+    };
   }
 
   async requestTask(userText: string, pageUrl: string): Promise<TaskDefinition> {

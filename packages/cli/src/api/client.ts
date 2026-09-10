@@ -7,8 +7,20 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 
 function bodyErrorCode(body: unknown): string | undefined {
   const record = asRecord(body);
-  const code = record?.code ?? record?.errorCode ?? asRecord(record?.error)?.code;
-  return typeof code === "string" ? code : undefined;
+  const data = asRecord(record?.data);
+  const error = asRecord(record?.error);
+  const code = record?.code ?? record?.errorCode ?? record?.error
+    ?? data?.code ?? data?.errorCode ?? data?.error
+    ?? error?.code;
+  return typeof code === "string" ? code.trim().toUpperCase() : undefined;
+}
+
+function bodyErrorMessage(body: unknown): string | undefined {
+  const record = asRecord(body);
+  const message = record?.message
+    ?? (typeof record?.error === "string" ? record.error : undefined)
+    ?? asRecord(record?.error)?.message;
+  return typeof message === "string" && message.trim() ? message.trim() : undefined;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -61,7 +73,7 @@ export class ApiClient {
       if (code === "API_KEY_REVOKED" || bodyErrorCode(body) === "API_KEY_REVOKED") {
         throw new ApiError("This API key has been revoked.", response.status, "API_KEY_REVOKED");
       }
-      throw new ApiError(`Asiyst API returned HTTP ${response.status}.`, response.status, code);
+      throw new ApiError(bodyErrorMessage(body) ?? `Asiyst API returned HTTP ${response.status}.`, response.status, code);
     }
 
     if (rawText && body === undefined) {

@@ -1,7 +1,8 @@
 import type { ProjectDetection } from "../types.js";
+import { muted, section, success, symbols, title, warning } from "./format.js";
 
-export const ok = (label: string, detail = "") => console.log(`✓ ${label}${detail ? ` (${detail})` : ""}`);
-export const fail = (label: string, detail = "") => console.log(`✗ ${label}${detail ? `: ${detail}` : ""}`);
+export const ok = (label: string, detail = "") => console.log(`${success(symbols.success)} ${label}${detail ? ` (${detail})` : ""}`);
+export const fail = (label: string, detail = "") => console.log(`${symbols.error} ${label}${detail ? `: ${detail}` : ""}`);
 
 export function projectChecks(project: ProjectDetection): void {
   project.packageJson
@@ -14,9 +15,31 @@ export function projectChecks(project: ProjectDetection): void {
   ok("Package manager detected", project.packageManager);
   project.sdkVersion
     ? ok("@asiyst/sdk detected", project.sdkVersion)
-    : console.log("@asiyst/sdk is not installed. You can connect the project now and install the SDK later.");
+    : console.log(`${muted(symbols.disconnected)} @asiyst/sdk not installed. Install it with your package manager.`);
 }
 
-export function homeStatus(): void {
-  console.log("\nConnect your project to Asiyst to view stats.\n");
+export function printProjectSummary(project: ProjectDetection, connected: boolean, projectName?: string, website?: string): void {
+  console.log(title("Asiyst CLI"));
+  console.log();
+  console.log(section("Project"));
+  console.log(`  ${projectName || (typeof project.packageJson?.name === "string" ? project.packageJson.name : project.cwd)}`);
+  if (website) console.log(`  ${muted(website)}`);
+  const marker = connected ? success(symbols.connected) : muted(symbols.disconnected);
+  console.log(`  ${marker} ${connected ? "Connected" : "Not connected"}`);
+  console.log();
+  console.log(section("Environment"));
+  console.log(`  ${project.framework} · ${project.language} · ${project.packageManager}`);
+}
+
+export function homeStatus(project?: ProjectDetection, connected = false): void {
+  if (!project) {
+    console.log(`\n${title("Asiyst CLI")}\n`);
+    return;
+  }
+  printProjectSummary(project, connected);
+  console.log();
+  console.log(connected
+    ? "Manage your connected project."
+    : `${warning(symbols.warning)} Connect your project to Asiyst to view stats.`);
+  console.log();
 }

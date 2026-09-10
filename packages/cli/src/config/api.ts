@@ -1,9 +1,21 @@
 export const PRODUCTION_API_ORIGIN = "https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api";
 export const CLI_API_BASE_URL = PRODUCTION_API_ORIGIN;
-export const VERIFY_KEY_PATH = "/auth/api-key/verify";
+export const VERIFY_KEY_PATH = "/verify/api-key";
 export const VERIFY_KEY_URL = `${CLI_API_BASE_URL}${VERIFY_KEY_PATH}`;
 export const ASIYST_WEB_URL = "https://asiyst.com";
 export const ASIIYST_WEB_URL = ASIYST_WEB_URL;
+export const ASIYST_REGISTER_URL = `${ASIYST_WEB_URL}/register`;
+export const ASIYST_LOGIN_URL = `${ASIYST_WEB_URL}/login`;
+export const ASIYST_PROJECT_NEW_URL = "/project/new";
+export const ASIYST_DASHBOARD_URLS = {
+  profile: `${ASIYST_WEB_URL}/dashboard/profile`,
+  projects: `${ASIYST_WEB_URL}/dashboard/projects`,
+  apiKeys: `${ASIYST_WEB_URL}/dashboard/api-keys`,
+  connectSite: `${ASIYST_WEB_URL}/dashboard/connect-site`,
+  avatarStudio: `${ASIYST_WEB_URL}/dashboard/avatar-studio`,
+  knowledge: `${ASIYST_WEB_URL}/dashboard/knowledge`,
+  sdkInstall: `${ASIYST_WEB_URL}/dashboard/sdk-install`,
+} as const;
 export const REQUEST_TIMEOUT_MS = 15_000;
 
 function readEnv(env: NodeJS.ProcessEnv, ...keys: string[]): string | undefined {

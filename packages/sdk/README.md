@@ -20,13 +20,29 @@ npx @asiyst/cli init
 
 ## Usage
 
+Project ID is required. The value must be the public Project ID for the target Asiyst project, not the developer account user ID and not the internal Supabase UUID.
+
 ```ts
 import { Asiyst } from "@asiyst/sdk";
 
 await Asiyst.init({
-  projectId: "asiyst_project_id",
-  publicKey: "asiyst_public_key",
+  projectId: "<PUBLIC_PROJECT_ID>",
+  publicKey: "<PUBLIC_KEY>",
+  avatarId: "<PUBLIC_AVATAR_ID>",
 });
+```
+
+Do not pass a secret API key as `publicKey` or omit `projectId`.
+
+`avatarId` selects the avatar that the dashboard configured for this project. It is a public identifier, not an authorization credential. The SDK sends it as a selection hint while the Asiyst API still authenticates and authorizes the project with the public project key.
+
+Knowledge sources, including optional GitHub repositories, are configured in Asiyst Web. The SDK does not receive GitHub credentials and does not copy Knowledge Base content into the website. It initializes the verified project/avatar and retrieves authorized knowledge through the Asiyst backend.
+
+```ts
+await Asiyst.init({
+  publicKey: "<PUBLIC_KEY>",
+});
+// throws: Asiyst SDK: projectId is required.
 ```
 
 Mark important controls so the assistant can find them across layouts:

@@ -80,6 +80,8 @@ export type TargetInput = string | TargetRef;
 export interface InitOptions {
   projectId: string;
   publicKey: string;
+  avatarId?: string;
+  position?: AnchorPosition;
   apiBaseUrl?: string;
   mode?: AssistantMode;
   allowedActions?: ActionKind[];

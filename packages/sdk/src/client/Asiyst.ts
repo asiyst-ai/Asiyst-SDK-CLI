@@ -54,6 +54,10 @@ export const Asiyst = {
     return requireRuntime().getConnectionStatus();
   },
 
+  getVerificationStatus(): "connected" | "inactive" | "not_detected" | "error" {
+    return requireRuntime().getVerificationStatus();
+  },
+
   avatar: {
     show(): void {
       withIsolation(() => requireRuntime().avatarApi().show());

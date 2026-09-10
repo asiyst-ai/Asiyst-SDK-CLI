@@ -6,6 +6,7 @@ export interface HttpTransportOptions {
   apiBaseUrl: string;
   projectId: string;
   publicKey: string;
+  avatarId?: string;
 }
 
 export class HttpTransport implements CloudTransport {
@@ -22,6 +23,7 @@ export class HttpTransport implements CloudTransport {
           "Content-Type": "application/json",
           "X-Asiyst-Project-Id": this.options.projectId,
           "X-Asiyst-Public-Key": this.options.publicKey,
+          ...(this.options.avatarId ? { "X-Asiyst-Avatar-Id": this.options.avatarId } : {}),
           "X-Asiyst-SDK-Version": SDK_VERSION,
         },
         body: req.body === undefined ? undefined : JSON.stringify(req.body),

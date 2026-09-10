@@ -22,6 +22,9 @@ export function readProjectMetadata(cwd: string): ProjectMetadata | undefined {
       projectName: typeof body.projectName === "string" ? body.projectName : undefined,
       website: typeof body.website === "string" ? body.website : undefined,
       publicKey: typeof body.publicKey === "string" ? body.publicKey : undefined,
+      userId: typeof body.userId === "string" ? body.userId : undefined,
+      avatarId: typeof body.avatarId === "string" ? body.avatarId : undefined,
+      avatarName: typeof body.avatarName === "string" ? body.avatarName : undefined,
       connected: body.connected === true,
     };
   } catch {
@@ -39,6 +42,9 @@ export function writeProjectMetadata(cwd: string, connection: ConnectedProject):
     projectName: connection.projectName,
     website: connection.website,
     publicKey: connection.publicKey,
+    userId: connection.userId,
+    avatarId: connection.avatarId,
+    avatarName: connection.avatarName,
     connected: true,
   };
   writeFileSync(projectConfigPath(cwd), `${JSON.stringify(next, null, 2)}\n`, { encoding: "utf8" });
@@ -47,10 +53,6 @@ export function writeProjectMetadata(cwd: string, connection: ConnectedProject):
 export function clearProjectMetadata(cwd: string): void {
   const path = projectConfigPath(cwd);
   if (!existsSync(path)) return;
-  const existing = readProjectMetadata(cwd) ?? {};
-  const next: ProjectMetadata = {
-    ...existing,
-    connected: false,
-  };
+  const next: ProjectMetadata = { connected: false };
   writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`, { encoding: "utf8" });
 }

@@ -47,6 +47,7 @@ export class ConfigManager {
     return {
       ...base,
       mode: this.options.mode ?? base.mode,
+      position: this.options.position ?? base.position,
       allowedActions: this.options.allowedActions ?? base.allowedActions,
     };
   }

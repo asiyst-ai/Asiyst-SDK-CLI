@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
-import type { ConnectedProject } from "../types.js";
+import type { ConnectedProject, OnboardingSession } from "../types.js";
 
 const execFileAsync = promisify(execFile);
 const SERVICE = "Asiyst CLI";
@@ -81,6 +81,69 @@ async function dpapiUnprotect(payload: string): Promise<string | undefined> {
 
 function windowsBlobPath(): string {
   return join(configDir(), "credentials.dpapi");
+}
+
+function onboardingStorePath(): string {
+  return join(configDir(), "onboarding-session.json");
+}
+
+function onboardingWindowsBlobPath(): string {
+  return join(configDir(), "onboarding-session.dpapi");
+}
+
+function validOnboardingSession(value: unknown): value is OnboardingSession {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const session = value as Partial<OnboardingSession>;
+  return typeof session.sessionId === "string"
+    && session.sessionId.trim().length > 0;
+}
+
+async function protectOnboardingSession(session: OnboardingSession): Promise<string | undefined> {
+  return dpapiProtect(JSON.stringify(session));
+}
+
+async function unprotectOnboardingSession(payload: string): Promise<OnboardingSession | undefined> {
+  const decrypted = await dpapiUnprotect(payload);
+  if (!decrypted) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(decrypted);
+    return validOnboardingSession(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function saveOnboardingSession(session: OnboardingSession): Promise<void> {
+  mkdirSync(configDir(), { recursive: true, mode: 0o700 });
+  if (process.platform === "win32") {
+    const protectedBlob = await protectOnboardingSession(session);
+    if (protectedBlob) {
+      writeFileSync(onboardingWindowsBlobPath(), protectedBlob, { encoding: "utf8", mode: 0o600 });
+      if (existsSync(onboardingStorePath())) unlinkSync(onboardingStorePath());
+      return;
+    }
+  }
+  if (existsSync(onboardingWindowsBlobPath())) unlinkSync(onboardingWindowsBlobPath());
+  writeFileSync(onboardingStorePath(), JSON.stringify(session, null, 2), { encoding: "utf8", mode: 0o600 });
+}
+
+export async function loadOnboardingSession(): Promise<OnboardingSession | undefined> {
+  if (process.platform === "win32" && existsSync(onboardingWindowsBlobPath())) {
+    const protectedSession = await unprotectOnboardingSession(readFileSync(onboardingWindowsBlobPath(), "utf8"));
+    if (protectedSession) return protectedSession;
+  }
+  if (!existsSync(onboardingStorePath())) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(onboardingStorePath(), "utf8"));
+    return validOnboardingSession(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function clearOnboardingSession(): Promise<void> {
+  if (existsSync(onboardingWindowsBlobPath())) unlinkSync(onboardingWindowsBlobPath());
+  if (existsSync(onboardingStorePath())) unlinkSync(onboardingStorePath());
 }
 
 export async function saveConnection(cwd: string, connection: ConnectedProject): Promise<void> {

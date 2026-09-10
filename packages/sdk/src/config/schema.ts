@@ -12,6 +12,22 @@ const ANCHORS: AnchorPosition[] = [
   "top-left",
 ];
 
+export const PUBLIC_IDENTIFIER_PATTERN = /^(?=.{1,128}$)[A-Za-z0-9_][A-Za-z0-9_-]*$/;
+
+export function isValidPublicIdentifier(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 128) return false;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(trimmed)) {
+    return false;
+  }
+  return PUBLIC_IDENTIFIER_PATTERN.test(trimmed);
+}
+
+export function isValidProjectId(value: unknown): value is string {
+  return isValidPublicIdentifier(value);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -136,11 +152,15 @@ function parseDataSources(value: unknown): AvatarDataSource[] {
       url: typeof entry.url === "string" ? sanitizeText(entry.url, 400) : undefined,
       method: typeof entry.method === "string" ? sanitizeText(entry.method, 20) : undefined,
       headers: isRecord(entry.headers)
-        ? Object.fromEntries(
-            Object.entries(entry.headers)
-              .filter(([key, item]) => typeof key === "string" && typeof item === "string")
-              .map(([key, item]) => [sanitizeText(key, 64), sanitizeText(item, 200)]),
-          )
+        ? (() => {
+            const safeHeaders: Record<string, string> = {};
+            for (const [key, value] of Object.entries(entry.headers as Record<string, unknown>)) {
+              if (typeof value === "string") {
+                safeHeaders[sanitizeText(key, 64)] = sanitizeText(value, 200);
+              }
+            }
+            return safeHeaders;
+          })()
         : undefined,
       credentials: typeof entry.credentials === "string" ? "[redacted]" : undefined,
     });
@@ -271,18 +291,35 @@ export function normalizeProjectConfig(raw: unknown): ProjectConfig {
 export function validateInitOptions(options: {
   projectId?: unknown;
   publicKey?: unknown;
-}): { projectId: string; publicKey: string } {
-  if (typeof options.projectId !== "string" || !options.projectId.trim()) {
-    throw new ConfigurationError("projectId is required");
+  avatarId?: unknown;
+  position?: unknown;
+}): { projectId: string; publicKey: string; avatarId?: string; position?: AnchorPosition } {
+  const projectIdValue = typeof options.projectId === "string" ? options.projectId.trim() : "";
+  if (!projectIdValue) {
+    throw new ConfigurationError("Asiyst SDK: projectId is required.");
+  }
+  if (!isValidProjectId(projectIdValue)) {
+    throw new ConfigurationError("Asiyst SDK: projectId is invalid. Use a public Project ID.");
   }
   if (typeof options.publicKey !== "string" || !options.publicKey.trim()) {
     throw new ConfigurationError("publicKey is required");
   }
-  if (options.projectId.length > 128 || options.publicKey.length > 256) {
+  if (projectIdValue.length > 128 || options.publicKey.trim().length > 256) {
     throw new ConfigurationError("project credentials exceed allowed length");
   }
+  const avatarId = typeof options.avatarId === "string" ? options.avatarId.trim() : "";
+  if (options.avatarId !== undefined && (!avatarId || avatarId.length > 128 || !/^[A-Za-z0-9_-]+$/.test(avatarId))) {
+    throw new ConfigurationError("Asiyst SDK: avatarId is invalid.");
+  }
+  const position = options.position === undefined ? undefined
+    : ANCHORS.includes(options.position as AnchorPosition) ? options.position as AnchorPosition : undefined;
+  if (options.position !== undefined && !position) {
+    throw new ConfigurationError("Asiyst SDK: position is invalid.");
+  }
   return {
-    projectId: options.projectId.trim(),
+    projectId: projectIdValue,
     publicKey: options.publicKey.trim(),
+    avatarId: avatarId || undefined,
+    position,
   };
 }
