@@ -23,8 +23,8 @@ function stringValue(body: Record<string, unknown>, ...keys: string[]): string |
 
 function sessionHeaders(sessionId: string): HeadersInit {
   return {
-    Authorization: `Session ${sessionId}`,
-    "X-Asiyst-Onboarding-Session": sessionId,
+    Authorization: `Bearer ${sessionId}`,
+    "X-Asiyst-Session": sessionId,
   };
 }
 
@@ -37,6 +37,9 @@ const ALLOWED_DESTINATIONS = new Set([
   "/dashboard",
   "/dashboard/profile",
   "/project/new",
+  "/projects/new",
+  "/dashboard/projects",
+  "/dashboard/projects/new",
   "/dashboard/avatar-studio",
   "/dashboard/knowledge",
   "/dashboard/sdk-installation",
@@ -44,7 +47,20 @@ const ALLOWED_DESTINATIONS = new Set([
   "/dashboard/api",
   "/dashboard/api-keys",
   "/dashboard/connect-site",
+  "/dashboard/domain-verification",
+  "/dashboard/connect",
+  "/dashboard/domain",
 ]);
+
+export function isAllowedDestination(path: string): boolean {
+  if (!path || !path.startsWith("/") || path.startsWith("//")) return false;
+  const pathname = path.split("?", 1)[0].split("#", 1)[0];
+  if (ALLOWED_DESTINATIONS.has(pathname)) return true;
+  if (/^\/dashboard\/projects\/[^/]+(\/(connect-site|domain|sdk-install|api-keys|avatar-studio|knowledge))?$/.test(pathname)) {
+    return true;
+  }
+  return false;
+}
 
 export async function createOnboardingSession(api: ApiClient, userId?: string, authSessionId?: string): Promise<OnboardingSession> {
   const verifiedUserId = userId?.trim();
@@ -85,8 +101,7 @@ export async function createWebHandoff(
   session: OnboardingSession,
   path: string,
 ): Promise<WebHandoff> {
-  const pathname = path.split("?", 1)[0];
-  if (!ALLOWED_DESTINATIONS.has(pathname) || !path.startsWith("/") || path.startsWith("//")) {
+  if (!isAllowedDestination(path)) {
     throw new ApiError("Invalid onboarding destination.", 400, "INVALID_REQUEST");
   }
   let body: Record<string, unknown>;

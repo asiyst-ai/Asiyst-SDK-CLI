@@ -1,6 +1,6 @@
 import { ApiError } from "../api/errors.js";
 import { openAuthenticatedWebPage } from "../browser/onboarding.js";
-import { ASIYST_DASHBOARD_URLS } from "../config/api.js";
+import { buildKnowledgeUrl } from "../browser/urls.js";
 import { loadConnection } from "../config/credentials.js";
 import { createApiClient } from "./shared.js";
 import { requireAuthenticated } from "./authenticated.js";
@@ -20,8 +20,8 @@ export async function knowledgeCommand(cwd = process.cwd(), args: string[] = [])
     console.log("Knowledge source details are available from the connected Asiyst project.");
   }
   try {
-    const path = `${new URL(ASIYST_DASHBOARD_URLS.knowledge).pathname}?projectId=${encodeURIComponent(connection.projectId)}`;
-    if (await openAuthenticatedWebPage(createApiClient(), path)) console.log("✓ Knowledge page opened.");
+    const targetUrl = buildKnowledgeUrl(connection.projectId);
+    if (await openAuthenticatedWebPage(createApiClient(), targetUrl, undefined, "Knowledge Base")) console.log("✓ Knowledge page opened.");
     else console.log("Unable to open the authenticated Knowledge page.");
   } catch (error) {
     console.log(error instanceof ApiError ? error.message : "Unable to open the Knowledge page.");

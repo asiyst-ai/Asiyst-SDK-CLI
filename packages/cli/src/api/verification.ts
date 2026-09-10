@@ -121,21 +121,29 @@ export async function verifyUser(api: ApiClient, userId: string, sessionId?: str
   return { userId: verifiedUserId, userName: stringValue(body, "userName", "name") };
 }
 
-export async function verifyProject(api: ApiClient, userId: string, projectId: string, sessionId?: string): Promise<ProjectVerificationResult> {
-  const verifiedUserId = assertValid(userId, "User ID", isValidUserId);
+export async function verifyProject(
+  api: ApiClient,
+  userId: string | undefined,
+  projectId: string,
+  sessionId?: string,
+): Promise<ProjectVerificationResult> {
   const verifiedProjectId = assertValid(projectId, "Project ID", isValidProjectId);
+  const verifiedUserId = userId && isValidUserId(userId) ? userId.trim() : undefined;
   const body = record(await api.request<unknown>("/verify/project", {
     method: "POST",
     headers: sessionHeaders(sessionId),
-    body: JSON.stringify({ userId: verifiedUserId, projectId: verifiedProjectId }),
+    body: JSON.stringify({
+      ...(verifiedUserId ? { userId: verifiedUserId } : {}),
+      projectId: verifiedProjectId,
+    }),
   }));
   assertVerified(body, "Project verification failed.");
   const returnedProjectId = nestedStringValue(body, ["project"], "projectId", "project_id", "id");
   const returnedUserId = nestedStringValue(body, ["user"], "userId", "user_id", "id");
   if (returnedProjectId && returnedProjectId !== verifiedProjectId) throw new ApiError("The API returned a different Project ID.", 200, "PROJECT_MISMATCH");
-  if (returnedUserId && returnedUserId !== verifiedUserId) throw new ApiError("The API returned a different User ID.", 200, "USER_MISMATCH");
+  if (returnedUserId && verifiedUserId && returnedUserId !== verifiedUserId) throw new ApiError("The API returned a different User ID.", 200, "USER_MISMATCH");
   return {
-    userId: verifiedUserId,
+    userId: returnedUserId ?? verifiedUserId ?? "",
     projectId: verifiedProjectId,
     projectName: nestedStringValue(body, ["project"], "projectName", "project_name", "name"),
     website: nestedStringValue(body, ["project"], "website", "websiteUrl", "website_url", "domain"),
@@ -145,11 +153,11 @@ export async function verifyProject(api: ApiClient, userId: string, projectId: s
 
 export async function verifyApiKeyRelationship(
   api: ApiClient,
-  input: { userId: string; projectId: string; apiKey: string; sessionId?: string },
+  input: { userId?: string; projectId: string; apiKey: string; sessionId?: string },
 ): Promise<ConnectedProject> {
-  const userId = assertValid(input.userId, "User ID", isValidUserId);
   const projectId = assertValid(input.projectId, "Project ID", isValidProjectId);
   const apiKey = assertValid(input.apiKey, "API key", isValidApiKey);
+  const verifiedUserId = input.userId && isValidUserId(input.userId) ? input.userId.trim() : undefined;
   const body = record(await api.request<unknown>("/verify/api-key", {
     method: "POST",
     headers: {
@@ -157,16 +165,20 @@ export async function verifyApiKeyRelationship(
       "X-Asiyst-API-Key": apiKey,
       ...(input.sessionId ? { "X-Asiyst-Session": input.sessionId } : {}),
     },
-    body: JSON.stringify({ userId, projectId, apiKey }),
+    body: JSON.stringify({
+      ...(verifiedUserId ? { userId: verifiedUserId } : {}),
+      projectId,
+      apiKey,
+    }),
   }));
   assertVerified(body, "API key verification failed.");
   const returnedUserId = nestedStringValue(body, ["user"], "userId", "user_id", "id");
   const returnedProjectId = nestedStringValue(body, ["project"], "projectId", "project_id", "id");
-  if (returnedUserId && returnedUserId !== userId) throw new ApiError("The API returned a different User ID.", 200, "USER_MISMATCH");
+  if (returnedUserId && verifiedUserId && returnedUserId !== verifiedUserId) throw new ApiError("The API returned a different User ID.", 200, "USER_MISMATCH");
   if (returnedProjectId && returnedProjectId !== projectId) throw new ApiError("The API returned a different Project ID.", 200, "PROJECT_MISMATCH");
   return {
     apiKey,
-    userId,
+    userId: returnedUserId ?? verifiedUserId ?? "",
     projectId,
     projectName: nestedStringValue(body, ["project"], "projectName", "project_name", "name"),
     website: nestedStringValue(body, ["project"], "website", "websiteUrl", "website_url", "domain"),
@@ -176,12 +188,12 @@ export async function verifyApiKeyRelationship(
 
 export async function verifyAvatar(
   api: ApiClient,
-  input: { userId: string; projectId: string; apiKey: string; avatarId: string; sessionId?: string },
+  input: { userId?: string; projectId: string; apiKey: string; avatarId: string; sessionId?: string },
 ): Promise<AvatarVerificationResult> {
-  const userId = assertValid(input.userId, "User ID", isValidUserId);
   const projectId = assertValid(input.projectId, "Project ID", isValidProjectId);
   const apiKey = assertValid(input.apiKey, "API key", isValidApiKey);
   const avatarId = assertValid(input.avatarId, "Avatar ID", isValidAvatarId);
+  const verifiedUserId = input.userId && isValidUserId(input.userId) ? input.userId.trim() : undefined;
   const body = record(await api.request<unknown>("/verify/avatar", {
     method: "POST",
     headers: {
@@ -189,26 +201,36 @@ export async function verifyAvatar(
       "X-Asiyst-API-Key": apiKey,
       ...(input.sessionId ? { "X-Asiyst-Session": input.sessionId } : {}),
     },
-    body: JSON.stringify({ userId, projectId, apiKey, avatarId }),
+    body: JSON.stringify({
+      ...(verifiedUserId ? { userId: verifiedUserId } : {}),
+      projectId,
+      apiKey,
+      avatarId,
+    }),
   }));
   assertVerified(body, "Avatar verification failed.");
   const returnedAvatarId = nestedStringValue(body, ["avatar"], "avatarId", "avatar_id", "id");
   const returnedUserId = nestedStringValue(body, ["user"], "userId", "user_id", "id");
   const returnedProjectId = nestedStringValue(body, ["project"], "projectId", "project_id", "id");
   if (returnedAvatarId && returnedAvatarId !== avatarId) throw new ApiError("The API returned a different Avatar ID.", 200, "AVATAR_MISMATCH");
-  if (returnedUserId && returnedUserId !== userId) throw new ApiError("The API returned a different User ID.", 200, "USER_MISMATCH");
+  if (returnedUserId && verifiedUserId && returnedUserId !== verifiedUserId) throw new ApiError("The API returned a different User ID.", 200, "USER_MISMATCH");
   if (returnedProjectId && returnedProjectId !== projectId) throw new ApiError("The API returned a different Project ID.", 200, "PROJECT_MISMATCH");
-  return { userId, projectId, avatarId, avatarName: nestedStringValue(body, ["avatar"], "avatarName", "avatar_name", "name") };
+  return {
+    userId: returnedUserId ?? verifiedUserId ?? "",
+    projectId,
+    avatarId,
+    avatarName: nestedStringValue(body, ["avatar"], "avatarName", "avatar_name", "name"),
+  };
 }
 
 export async function createImportSession(
   api: ApiClient,
-  input: { userId: string; projectId: string; apiKey: string; avatarId: string; sessionId?: string },
+  input: { userId?: string; projectId: string; apiKey: string; avatarId: string; sessionId?: string },
 ): Promise<ImportSessionResult> {
-  const userId = assertValid(input.userId, "User ID", isValidUserId);
   const projectId = assertValid(input.projectId, "Project ID", isValidProjectId);
   const apiKey = assertValid(input.apiKey, "API key", isValidApiKey);
   const avatarId = assertValid(input.avatarId, "Avatar ID", isValidAvatarId);
+  const verifiedUserId = input.userId && isValidUserId(input.userId) ? input.userId.trim() : undefined;
   const body = record(await api.request<unknown>("/import-session", {
     method: "POST",
     headers: {
@@ -216,7 +238,12 @@ export async function createImportSession(
       "X-Asiyst-API-Key": apiKey,
       ...(input.sessionId ? { "X-Asiyst-Session": input.sessionId } : {}),
     },
-    body: JSON.stringify({ userId, projectId, apiKey, avatarId }),
+    body: JSON.stringify({
+      ...(verifiedUserId ? { userId: verifiedUserId } : {}),
+      projectId,
+      apiKey,
+      avatarId,
+    }),
   }));
   const sessionId = stringValue(body, "sessionId", "session_id", "id");
   if (!sessionId) throw new ApiError("The API did not return an import session.", 200, "MALFORMED_RESPONSE");

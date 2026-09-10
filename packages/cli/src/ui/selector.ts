@@ -1,5 +1,6 @@
 import { stdin, stdout } from "node:process";
 import { clearLine, cursorTo, emitKeypressEvents, moveCursor } from "node:readline";
+import { section, title, success, symbols } from "./format.js";
 
 export interface SelectorOption<T> {
   label: string;
@@ -68,9 +69,9 @@ function restoreTerminal(wasRaw: boolean): void {
   if (stdin.isTTY) stdin.setRawMode?.(wasRaw);
 }
 
-export function selectOption<T>(title: string, options: SelectorOption<T>[]): Promise<SelectorResult<T>> {
+export function selectOption<T>(question: string, options: SelectorOption<T>[]): Promise<SelectorResult<T>> {
   if (interactiveSelector) {
-    return interactiveSelector(title, options as SelectorOption<unknown>[]).then((value) =>
+    return interactiveSelector(question, options as SelectorOption<unknown>[]).then((value) =>
       value === undefined ? { type: "cancelled" } : { type: "selected", value: value as T });
   }
   if (!stdin.isTTY || !stdout.isTTY) return Promise.resolve({ type: "cancelled" });
@@ -93,11 +94,19 @@ export function selectOption<T>(title: string, options: SelectorOption<T>[]): Pr
     };
 
     const render = () => {
-      const lines = [title, "", ...enabled.map((option, index) => `${index === active ? "❯" : " "} ${option.label}`)];
+      const lines = [
+        question,
+        "",
+        ...enabled.map((option, index) =>
+          index === active
+            ? `${section("❯")} ${title(option.label)}`
+            : `  ${option.label}`,
+        ),
+      ];
       renderedLines = renderSelectorFrame(stdout, renderedLines, lines);
     };
 
-    const onKeypress = (_value: string, key: { name?: string; ctrl?: boolean; sequence?: string } | undefined) => {
+    const onKeypress = (chunk: string, key: { name?: string; ctrl?: boolean; sequence?: string } | undefined) => {
       if (!key) return;
       if (key.ctrl && key.name === "c") {
         clearSelectorFrame(stdout, renderedLines);
@@ -107,14 +116,18 @@ export function selectOption<T>(title: string, options: SelectorOption<T>[]): Pr
         process.exit(130);
       }
       if (key.name === "escape") return finish({ type: "cancelled" });
-      if (key.name === "up" || key.name === "down") {
-        active = moveSelection(active, enabled.length, key.name);
+      if (key.name === "up" || chunk === "k") {
+        active = moveSelection(active, enabled.length, "up");
+        return render();
+      }
+      if (key.name === "down" || chunk === "j") {
+        active = moveSelection(active, enabled.length, "down");
         return render();
       }
       if (key.name === "return" || key.name === "enter") {
         const selected = enabled[active];
         if (!selected) return finish({ type: "cancelled" });
-        return finish({ type: "selected", value: selected.value }, `✓ ${selected.label} selected.`);
+        return finish({ type: "selected", value: selected.value }, `${success(symbols.success)} ${selected.label} selected.`);
       }
     };
 
@@ -126,3 +139,4 @@ export function selectOption<T>(title: string, options: SelectorOption<T>[]): Pr
     render();
   });
 }
+

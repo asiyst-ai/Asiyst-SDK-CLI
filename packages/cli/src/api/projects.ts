@@ -98,13 +98,15 @@ function parseAvatarImportResponse(value: unknown, projectId: string, userId: st
     : response;
   const imported = body.imported === true || body.success === true || body.status === "imported";
   const alreadyImported = body.code === "AVATAR_ALREADY_IMPORTED" || body.status === "already_imported";
+  const returnedUserId = body.userId ?? body.user_id;
+  const effectiveUserId = (typeof returnedUserId === "string" ? returnedUserId : undefined) ?? userId;
   if (alreadyImported) {
     return {
       imported: true,
       alreadyImported: true,
       avatarId,
       projectId,
-      userId,
+      userId: effectiveUserId,
       avatarName: typeof body.avatarName === "string" ? body.avatarName : undefined,
       publicKey: typeof body.publicKey === "string" ? body.publicKey : undefined,
     };
@@ -124,15 +126,14 @@ function parseAvatarImportResponse(value: unknown, projectId: string, userId: st
   if (returnedProjectId !== undefined && returnedProjectId !== projectId) {
     throw new ApiError("The API returned a different project than requested.", 200, "PROJECT_MISMATCH");
   }
-  const returnedUserId = body.userId ?? body.user_id;
-  if (returnedUserId !== undefined && returnedUserId !== userId) {
+  if (returnedUserId !== undefined && userId && returnedUserId !== userId) {
     throw new ApiError("The API returned a different user than requested.", 200, "USER_MISMATCH");
   }
   return {
     imported: true,
     avatarId,
     projectId,
-    userId,
+    userId: effectiveUserId,
     avatarName: typeof body.avatarName === "string" ? body.avatarName : undefined,
     publicKey: typeof body.publicKey === "string" ? body.publicKey : undefined,
   };
@@ -140,13 +141,13 @@ function parseAvatarImportResponse(value: unknown, projectId: string, userId: st
 
 export async function importAvatar(
   api: ApiClient,
-  input: { userId: string; projectId: string; apiKey: string; avatarId: string; sessionId?: string },
+  input: { userId?: string; projectId: string; apiKey: string; avatarId: string; sessionId?: string },
 ): Promise<AvatarImportResult> {
-  const userId = requireIdentifier(input.userId, "User ID", isValidUserId);
   const projectId = requireIdentifier(input.projectId, "Project ID", isValidProjectId);
   const avatarId = requireIdentifier(input.avatarId, "Avatar ID", isValidAvatarId);
   const apiKey = input.apiKey.trim();
   if (!isValidApiKey(apiKey)) throw new ApiError("API key format is invalid.", 400, "INVALID_API_KEY");
+  const userId = input.userId && isValidUserId(input.userId) ? input.userId.trim() : undefined;
 
   const value = await api.request<unknown>(`/cli/projects/${encodeURIComponent(projectId)}/avatars/import`, {
     method: "POST",
@@ -155,7 +156,11 @@ export async function importAvatar(
       "X-Asiyst-API-Key": apiKey,
       ...(input.sessionId ? { "X-Asiyst-Session": input.sessionId } : {}),
     },
-    body: JSON.stringify({ userId, projectId, avatarId }),
+    body: JSON.stringify({
+      ...(userId ? { userId } : {}),
+      projectId,
+      avatarId,
+    }),
   });
-  return parseAvatarImportResponse(value, projectId, userId, avatarId);
+  return parseAvatarImportResponse(value, projectId, userId ?? "", avatarId);
 }

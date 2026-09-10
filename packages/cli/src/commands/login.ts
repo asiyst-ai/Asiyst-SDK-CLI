@@ -40,10 +40,10 @@ export async function loginCommand(): Promise<void> {
       platform: process.platform,
     });
     console.log("⠋ Starting login...");
-    console.log("\nOpening Asiyst in your browser...");
-    if (!(await openBrowser(challenge.authorizationUrl))) {
+    console.log("\nOpening Asiyst login in your browser...");
+    if (!(await openBrowser(challenge.webLoginUrl))) {
       console.log("Browser could not be opened automatically.");
-      console.log(`Open:\n${challenge.authorizationUrl}`);
+      console.log(`Open:\n${challenge.webLoginUrl}`);
     }
     console.log("Waiting for authorization...");
     const deadline = challenge.expiresAt && !Number.isNaN(Date.parse(challenge.expiresAt))

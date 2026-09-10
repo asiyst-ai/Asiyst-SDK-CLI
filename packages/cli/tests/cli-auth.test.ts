@@ -10,11 +10,12 @@ function api(responses: Response[]): ApiClient {
 }
 
 describe("CLI authentication challenge flow", () => {
-  it("uses the authorization URL returned by challenge creation", async () => {
+  it("opens the backend-provided login URL before CLI authorization", async () => {
     const challenge = await createLoginChallenge(api([
       new Response(JSON.stringify({
         success: true,
         challengeId: "challenge-1",
+        webLoginUrl: "https://asiyst.com/login?challenge=challenge-1&redirectTo=%2Fcli%2Fauthorize%3Fbrowser_session_id%3Dbrowser-1%26state%3Dstate",
         authorizationUrl: "https://asiyst.com/cli/authorize?challenge=challenge-1",
         expiresAt: "2030-01-01T00:00:00.000Z",
       }), { status: 201 }),
@@ -24,7 +25,7 @@ describe("CLI authentication challenge flow", () => {
       cliVersion: "1.1.2",
       platform: "win32",
     });
-    expect(challenge.authorizationUrl).toContain("/cli/authorize?challenge=challenge-1");
+    expect(challenge.webLoginUrl).toBe("https://asiyst.com/login?challenge=challenge-1&redirectTo=%2Fcli%2Fauthorize%3Fbrowser_session_id%3Dbrowser-1%26state%3Dstate");
   });
 
   it("uses the browser session identifier from the authorization URL", async () => {
@@ -32,6 +33,7 @@ describe("CLI authentication challenge flow", () => {
       new Response(JSON.stringify({
         success: true,
         challengeId: "challenge-1",
+        webLoginUrl: "https://asiyst.com/login?browser_session_id=browser-1&state=state",
         authorizationUrl: "https://asiyst.com/cli/authorize?browser_session_id=browser-1&state=state",
       }), { status: 201 }),
     ]), {
@@ -40,7 +42,38 @@ describe("CLI authentication challenge flow", () => {
       cliVersion: "1.1.2",
       platform: "win32",
     });
+
     expect(challenge.browserSessionId).toBe("browser-1");
+  });
+
+  it("preserves the complete webLoginUrl returned by the backend", async () => {
+    const challenge = await createLoginChallenge(api([
+      new Response(JSON.stringify({
+        challengeId: "challenge-1",
+        webLoginUrl: "https://asiyst.com/login?challenge=challenge-1",
+      }), { status: 201 }),
+    ]), {
+      redirectUri: "http://127.0.0.1:12345/callback",
+      state: "state",
+      cliVersion: "1.1.3",
+      platform: "win32",
+    });
+    expect(challenge.webLoginUrl).toBe("https://asiyst.com/login?challenge=challenge-1");
+  });
+
+  it("rejects a challenge that only provides the CLI authorization page", async () => {
+    await expect(createLoginChallenge(api([
+      new Response(JSON.stringify({
+        success: true,
+        challengeId: "challenge-1",
+        authUrl: "https://asiyst.com/cli/authorize?challenge=challenge-1",
+      }), { status: 201 }),
+    ]), {
+      redirectUri: "http://127.0.0.1:12345/callback",
+      state: "state",
+      cliVersion: "1.1.3",
+      platform: "win32",
+    })).rejects.toMatchObject({ code: "MALFORMED_RESPONSE", message: "Asiyst authentication response did not include webLoginUrl." });
   });
 
   it("keeps pending challenges pending", async () => {

@@ -44,22 +44,23 @@ GitHub repository
   -> Website visitor
 ```
 
-The CLI remains limited to:
+The CLI connection flow proceeds as:
 
 ```text
-User verification
-  -> Project verification
-  -> API key verification
-  -> Avatar verification
-  -> Avatar import
-  -> SDK integration
+Step 1: Project creation / verification
+  -> Step 2: Domain verification
+  -> Step 3: API key verification
+  -> Step 4: SDK install & setup
+  -> Step 5: Avatar configuration & import
+  -> Step 6: Knowledge source connection
+  -> Final verification
 ```
 
 Interactive startup performs a lightweight npm version check. If a newer release exists, the CLI only displays a notification. It never installs or restarts automatically; run `update` and confirm to install it. Global installations are updated in place. For npx invocations, the latest package is downloaded and verified for that invocation without changing the website project.
 
-The CLI checks `GET /health` and verifies the complete connection relationship through `POST /verify/user`, `POST /verify/project`, `POST /verify/api-key`, and `POST /verify/avatar` on `https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api`. It creates an import session with `POST /import-session` before importing an avatar. Passwords, AI provider keys, Supabase keys, and private API credentials are never placed in URLs or logged.
+The CLI checks `GET /health` and verifies connection relationships through `POST /verify/project`, `POST /verify/api-key`, and `POST /verify/avatar` on `https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api`. It creates an import session with `POST /import-session` before importing an avatar. Passwords, AI provider keys, Supabase keys, and private API credentials are never placed in URLs or logged.
 
-After User ID verification, the CLI creates a persistent onboarding session with `POST /cli/onboarding/session` and stores its short-lived session reference using the existing OS-protected credential store. Browser pages are opened through `POST /cli/onboarding/handoff`, authenticated with that reference in request headers. The response must contain a short-lived, single-use `handoffToken`; only that token is placed in `https://asiyst.com/cli/onboarding/handoff?token=...`. The web handoff endpoint must validate and consume the token, establish the existing web session for its verified User ID, and redirect directly to the requested page (for example `/project/new`) without routing through `/register`. Invalid or expired sessions must return `SESSION_EXPIRED`, so the CLI can ask the user to reconnect rather than silently restarting registration.
+The CLI creates a persistent onboarding session with `POST /cli/onboarding/session` using the authenticated CLI session. Browser pages are opened through `POST /cli/onboarding/handoff`, authenticated with that reference in request headers. The response must contain a short-lived, single-use `handoffToken`; only that token is placed in `https://asiyst.com/cli/onboarding/handoff?token=...`. The web handoff endpoint must validate and consume the token, establish the existing web session for its verified user, and redirect directly to the requested page (for example `/project/new`) without routing through `/register`. Invalid or expired sessions must return `SESSION_EXPIRED`, so the CLI can ask the user to reconnect rather than silently restarting registration.
 
 Production API defaults to `https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api`.
 

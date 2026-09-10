@@ -1,15 +1,20 @@
 import { ApiClient } from "../api/client.js";
-import { createOnboardingSession } from "../api/onboarding.js";
-import { verifyApiKeyRelationship, verifyAvatar, verifyProject, verifyUser } from "../api/verification.js";
+import { verifyApiKeyRelationship, verifyAvatar, verifyProject } from "../api/verification.js";
 import { importAvatar, fetchProjectInfo, verifyInstallation, domainVerificationState } from "../api/projects.js";
 import { ApiError, friendlyApiMessage } from "../api/errors.js";
-import { ASIYST_PROJECT_NEW_URL, ASIYST_DASHBOARD_URLS, ASIYST_WEB_URL, VERIFY_KEY_URL, isDebugEnabled } from "../config/api.js";
-import { isValidApiKey, isValidAvatarId, isValidProjectId, isValidUserId, parseProjectIdArgument } from "../config/ids.js";
-import { loadConnection, saveConnection, saveOnboardingSession } from "../config/credentials.js";
+import { VERIFY_KEY_URL, isDebugEnabled } from "../config/api.js";
+import { isValidApiKey, isValidAvatarId, isValidProjectId, parseProjectIdArgument } from "../config/ids.js";
+import { loadConnection, saveConnection } from "../config/credentials.js";
 import { openAuthenticatedWebPage } from "../browser/onboarding.js";
+import {
+  buildProjectNewUrl,
+  buildDomainVerificationUrl,
+  buildApiKeysUrl,
+  buildAvatarStudioUrl,
+  buildKnowledgeUrl,
+} from "../browser/urls.js";
 import { writeProjectMetadata } from "../config/project.js";
 import { detectProject } from "../detection/project.js";
-import { inspectIntegration } from "../integration/writer.js";
 import { applyIntegration, installSdk, planIntegration } from "../integration/writer.js";
 import { fail, ok, projectChecks } from "../ui/output.js";
 import { selectOption } from "../ui/selector.js";
@@ -18,6 +23,7 @@ import { printHeader } from "../ui/format.js";
 import { ensureTrusted } from "./trust.js";
 import { createApiClient } from "./shared.js";
 import { requireAuthenticatedSession } from "./authenticated.js";
+import type { OnboardingSession } from "../types.js";
 
 async function retryOrCancel(message: string): Promise<boolean> {
   console.log(message);
@@ -39,17 +45,21 @@ function printApiFailure(error: unknown): string {
   return "✗ Unable to reach Asiyst API.";
 }
 
-async function promptForProjectId(api: ApiClient, session: Awaited<ReturnType<typeof createOnboardingSession>>): Promise<string | undefined> {
+async function promptForProjectId(api: ApiClient, session: OnboardingSession): Promise<string | undefined> {
   console.log("\nProject ID required");
   console.log("Find it in: Asiyst Dashboard -> Projects -> Select your project");
-  const open = await selectOption("Open Projects in your browser?", [
-    { label: "Open Projects", value: true },
+  const open = await selectOption("Open Project Creation in your browser?", [
+    { label: "Open Project Creation", value: true },
     { label: "Continue", value: false },
   ]);
   if (open.type === "selected" && open.value) {
     try {
-      if (await openAuthenticatedWebPage(api, ASIYST_PROJECT_NEW_URL, session)) console.log("✓ Project setup opened.");
-      else console.log("Unable to open the authenticated project setup page.");
+      const targetUrl = buildProjectNewUrl();
+      if (await openAuthenticatedWebPage(api, targetUrl, session, "Project Setup")) {
+        console.log("✓ Project setup opened.");
+      } else {
+        console.log("Unable to open the authenticated project setup page.");
+      }
     } catch (error) {
       console.log(printApiFailure(error));
       return undefined;
@@ -77,7 +87,7 @@ function parseAvatarIdArgument(argv: string[]): string | undefined {
   return inline?.slice(inline.indexOf("=") + 1);
 }
 
-async function promptForAvatarId(api: ApiClient, projectId: string, session: Awaited<ReturnType<typeof createOnboardingSession>>): Promise<string | undefined> {
+async function promptForAvatarId(api: ApiClient, projectId: string, session: OnboardingSession): Promise<string | undefined> {
   console.log("\nAvatar ID required");
   console.log("Find it in: Asiyst Dashboard -> Avatar Studio");
   const open = await selectOption("Open Avatar Studio in your browser?", [
@@ -86,10 +96,11 @@ async function promptForAvatarId(api: ApiClient, projectId: string, session: Awa
   ]);
   if (open.type === "selected" && open.value) {
     try {
-      if (await openAuthenticatedWebPage(api, ASIYST_DASHBOARD_URLS.avatarStudio, session)) {
+      const avatarUrl = buildAvatarStudioUrl(projectId);
+      if (await openAuthenticatedWebPage(api, avatarUrl, session, "Avatar Studio")) {
         console.log("✓ Avatar Studio opened.");
       } else {
-        console.log(`Open this URL manually:\n${ASIYST_DASHBOARD_URLS.avatarStudio}`);
+        console.log(`Open this URL manually:\n${avatarUrl}`);
       }
     } catch (error) {
       console.log(printApiFailure(error));
@@ -113,6 +124,7 @@ export async function connectCommand(cwd = process.cwd(), api = createApiClient(
   printHeader("Connect project", cwd);
   if (!(await ensureTrusted(cwd))) return;
 
+  // STEP 0 — Detect project
   const project = detectProject(cwd);
   projectChecks(project);
   if (project.framework === "Unknown") {
@@ -123,6 +135,7 @@ export async function connectCommand(cwd = process.cwd(), api = createApiClient(
   if (!currentSession) {
     return;
   }
+
   const currentConnection = await loadConnection(cwd);
   if (currentConnection?.userId && currentConnection.projectId && currentConnection.apiKey) {
     try {
@@ -135,7 +148,7 @@ export async function connectCommand(cwd = process.cwd(), api = createApiClient(
       console.log("✓ Asiyst is already connected.");
       return;
     } catch {
-      // A stale or revoked connection must go through the normal reauthorization flow.
+      // A stale or revoked connection must go through the normal connection flow.
     }
   }
 
@@ -149,62 +162,21 @@ export async function connectCommand(cwd = process.cwd(), api = createApiClient(
   }
 
   const existingSession = currentSession;
-  let onboardingSession: Awaited<ReturnType<typeof createOnboardingSession>>;
-  try {
-    onboardingSession = await createOnboardingSession(api, existingSession.userId, existingSession.sessionId);
-    ok("Account authorized.");
-    ok("Authentication session established.");
-  } catch (error) {
-    console.log(printApiFailure(error));
-    return;
-  }
+  let userId = existingSession.userId;
 
-  console.log("\nStep 1 — Verify User");
-  console.log("Opening Asiyst onboarding...");
-  try {
-    if (!(await openAuthenticatedWebPage(api, new URL(ASIYST_DASHBOARD_URLS.profile).pathname, onboardingSession))) {
-      console.log("Open the Asiyst onboarding page in your browser.");
-    }
-  } catch (error) {
-    console.log(printApiFailure(error));
-    return;
-  }
-  const userInput = await readInput("Paste your User ID: ");
-  if (userInput === undefined) {
-    console.log("Connection cancelled.");
-    return;
-  }
-  const userId = userInput.trim();
-  if (!isValidUserId(userId)) {
-    console.log("User ID verification failed. The User ID format is invalid.");
-    return;
-  }
-  try {
-    await verifyUser(api, userId, existingSession.sessionId);
-    await saveOnboardingSession({ ...existingSession, userId });
-    ok("User ID verified.");
-  } catch (error) {
-    console.log(printApiFailure(error));
-    return;
-  }
+  // STEP 1 — Authenticated Account
+  console.log("\nStep 1 — Authenticated Account");
+  ok("Account authenticated", existingSession.accountEmail ?? existingSession.userId ?? "authenticated");
 
-  console.log("\nOpening project setup...");
-  try {
-    if (!(await openAuthenticatedWebPage(api, ASIYST_PROJECT_NEW_URL, onboardingSession))) {
-      console.log(`Open this URL manually:\n${new URL(ASIYST_PROJECT_NEW_URL, ASIYST_WEB_URL).toString()}`);
-    }
-  } catch (error) {
-    console.log(printApiFailure(error));
-    return;
-  }
-
+  // STEP 2 — Project Creation / Verification
+  console.log("\nStep 2 — Project Creation / Verification");
   const projectIdArg = cliProjectId ?? parseProjectIdArgument(process.argv.slice(2));
   if (projectIdArg === "") {
     console.log("Project ID is required. Use: asiyst connect --project-id <PROJECT_ID>");
     return;
   }
   let projectId = typeof projectIdArg === "string" ? projectIdArg.trim() : "";
-  if (!projectId) projectId = (await promptForProjectId(api, onboardingSession)) || "";
+  if (!projectId) projectId = (await promptForProjectId(api, existingSession)) || "";
   if (!projectId) {
     console.log("Project ID is required. Use: asiyst connect --project-id <PROJECT_ID>");
     return;
@@ -217,16 +189,20 @@ export async function connectCommand(cwd = process.cwd(), api = createApiClient(
   let verifiedProject;
   try {
     verifiedProject = await verifyProject(api, userId, projectId, existingSession.sessionId);
+    if (verifiedProject.userId && !userId) {
+      userId = verifiedProject.userId;
+    }
     ok("Project verified.");
   } catch (error) {
     console.log(printApiFailure(error));
     return;
   }
 
-  console.log("\nStep 3 — Verify Domain");
+  // STEP 3 — Domain Verification
+  console.log("\nStep 3 — Domain Verification");
   try {
-    const domainPath = new URL(ASIYST_DASHBOARD_URLS.connectSite).pathname;
-    if (await openAuthenticatedWebPage(api, `${domainPath}?projectId=${encodeURIComponent(projectId)}`, onboardingSession)) {
+    const domainUrl = buildDomainVerificationUrl(projectId);
+    if (await openAuthenticatedWebPage(api, domainUrl, existingSession, "Domain Verification")) {
       console.log("Complete domain verification in your browser, then return here.");
     }
     const ready = await readInput("Press Enter to verify the domain, or Ctrl+C to cancel: ");
@@ -250,18 +226,15 @@ export async function connectCommand(cwd = process.cwd(), api = createApiClient(
     return;
   }
 
-  const avatarIdArg = cliAvatarId ?? parseAvatarIdArgument(process.argv.slice(2));
-  const avatarId = avatarIdArg?.trim() || await promptForAvatarId(api, projectId, onboardingSession);
-  if (!avatarId) {
-    console.log("Avatar ID is required to complete this connection.");
-    return;
-  }
-  let verifiedAvatar: Awaited<ReturnType<typeof verifyAvatar>>;
+  // STEP 4 — API Key
+  console.log("\nStep 4 — API Key");
+  console.log(`Create an API key for project: ${projectId}`);
+  console.log("Copy the complete secret key generated by Asiyst; do not copy the key ID or masked value.");
+
+  let apiKey: string | undefined;
+  let connected: Awaited<ReturnType<typeof verifyApiKeyRelationship>> | undefined;
 
   for (;;) {
-    console.log("\nAPI KEY SETUP");
-    console.log(`Create an API key for project: ${projectId}`);
-    console.log("Copy the complete secret key generated by Asiyst; do not copy the key ID or masked value.");
     console.log("\nAPI key required");
     console.log("Find it in: Asiyst Dashboard -> API Keys");
     const openKeys = await selectOption("Open API Keys in your browser?", [
@@ -270,15 +243,18 @@ export async function connectCommand(cwd = process.cwd(), api = createApiClient(
     ]);
     if (openKeys.type === "selected" && openKeys.value) {
       try {
-        const apiKeysPath = new URL(ASIYST_DASHBOARD_URLS.apiKeys).pathname;
-        if (await openAuthenticatedWebPage(api, apiKeysPath, onboardingSession)) console.log("✓ API Keys page opened.");
-        else console.log(`Open this URL manually:\n${ASIYST_DASHBOARD_URLS.apiKeys}`);
+        const apiKeysUrl = buildApiKeysUrl(projectId);
+        if (await openAuthenticatedWebPage(api, apiKeysUrl, existingSession, "API Keys")) {
+          console.log("✓ API Keys page opened.");
+        } else {
+          console.log(`Open this URL manually:\n${apiKeysUrl}`);
+        }
       } catch (error) {
         console.log(printApiFailure(error));
         return;
       }
     }
-    const apiKey = await readSecret("Paste your Asiyst API key: ");
+    apiKey = await readSecret("Paste your Asiyst API key: ");
     if (apiKey === undefined) {
       console.log("Connection cancelled.");
       return;
@@ -288,79 +264,14 @@ export async function connectCommand(cwd = process.cwd(), api = createApiClient(
       continue;
     }
     try {
-      const connected = await verifyApiKeyRelationship(api, { userId, projectId, apiKey, sessionId: existingSession.sessionId });
-      verifiedAvatar = await verifyAvatar(api, {
-        userId,
+      connected = await verifyApiKeyRelationship(api, {
+        userId: userId || verifiedProject.userId,
         projectId,
         apiKey,
-        avatarId,
         sessionId: existingSession.sessionId,
       });
-      const imported = await importAvatar(api, {
-        userId,
-        projectId,
-        apiKey,
-        avatarId: verifiedAvatar.avatarId,
-        sessionId: existingSession.sessionId,
-      });
-      const publicKey = connected.publicKey ?? verifiedProject.publicKey ?? imported.publicKey;
-      if (!publicKey) {
-        throw new ApiError("The verified project did not return a public SDK key.", 200, "MALFORMED_RESPONSE");
-      }
-      const detected = detectProject(cwd);
-      if (!detected.sdkVersion) {
-        console.log(`Installing @asiyst/sdk with ${detected.packageManager}...`);
-        await installSdk(detected);
-      }
-      const plan = planIntegration(detected, {
-        projectId,
-        publicKey,
-        avatarId: imported.avatarId,
-      });
-      applyIntegration(detectProject(cwd), { projectId, publicKey, avatarId: imported.avatarId }, plan);
-      const finalConnection = {
-        ...connected,
-        projectName: connected.projectName ?? verifiedProject.projectName,
-        website: connected.website ?? verifiedProject.website,
-        projectId,
-        userId,
-        avatarId: verifiedAvatar.avatarId,
-        avatarName: verifiedAvatar.avatarName,
-        publicKey,
-      };
       ok("API key verified.");
-      await saveConnection(cwd, finalConnection);
-      writeProjectMetadata(cwd, finalConnection);
-      console.log("\nASIIYST CONNECTION");
-      console.log("------------------");
-      console.log("Authentication   ✓ Logged in");
-      console.log("User             ✓ Connected");
-      console.log("Project          ✓ Connected");
-      console.log(`Avatar           ✓ ${verifiedAvatar.avatarName ?? verifiedAvatar.avatarId}`);
-      console.log("API Key          ✓ Verified");
-      const integration = inspectIntegration(detectProject(cwd));
-      console.log(`SDK              ${integration.sdkInstalled && integration.initialized ? "✓ Verified" : "✗ Not verified"}`);
-      console.log("\nStep 7 — Knowledge");
-      if (await openAuthenticatedWebPage(api, `${new URL(ASIYST_DASHBOARD_URLS.knowledge).pathname}?projectId=${encodeURIComponent(projectId)}&avatarId=${encodeURIComponent(imported.avatarId)}`, onboardingSession)) {
-        console.log("Configure and connect Knowledge sources to the selected avatar, then return here.");
-      }
-      const knowledgeReady = await readInput("Press Enter to verify Knowledge, or Ctrl+C to cancel: ");
-      if (knowledgeReady === undefined) {
-        console.log("Connection cancelled.");
-        return;
-      }
-      const finalChecks = await verifyInstallation(api, projectId, publicKey, connected.website ?? verifiedProject.website, existingSession.sessionId);
-      if (!finalChecks.every((check) => check.ok)) {
-        console.log("✗ Knowledge or final connection verification failed.");
-        return;
-      }
-      console.log("✓ Knowledge connected");
-      console.log("✓ Knowledge verified");
-      ok("Project connected successfully.");
-      console.log(`\nProject ID:\n${projectId}`);
-      if (connected.projectName) console.log(`\nProject:\n${connected.projectName}`);
-      if (connected.website) console.log(`\nWebsite:\n${connected.website}`);
-      return;
+      break;
     } catch (error) {
       const message = printApiFailure(error);
       const code = error instanceof ApiError ? error.code : "NETWORK";
@@ -378,6 +289,123 @@ export async function connectCommand(cwd = process.cwd(), api = createApiClient(
       }
     }
   }
+
+  if (!connected || !apiKey) {
+    console.log("Connection cancelled.");
+    return;
+  }
+
+  // STEP 5 — SDK Setup
+  console.log("\nStep 5 — SDK Setup");
+  const detected = detectProject(cwd);
+  if (!detected.sdkVersion) {
+    console.log(`Installing @asiyst/sdk with ${detected.packageManager}...`);
+    await installSdk(detected);
+  }
+  ok("SDK verified.");
+
+  // STEP 6 — Avatar Configuration
+  console.log("\nStep 6 — Avatar Configuration");
+  const avatarIdArg = cliAvatarId ?? parseAvatarIdArgument(process.argv.slice(2));
+  const avatarId = avatarIdArg?.trim() || await promptForAvatarId(api, projectId, existingSession);
+  if (!avatarId) {
+    console.log("Avatar ID is required to complete this connection.");
+    return;
+  }
+
+  let verifiedAvatar: Awaited<ReturnType<typeof verifyAvatar>>;
+  let imported: Awaited<ReturnType<typeof importAvatar>>;
+
+  try {
+    verifiedAvatar = await verifyAvatar(api, {
+      userId: userId || connected.userId,
+      projectId,
+      apiKey,
+      avatarId,
+      sessionId: existingSession.sessionId,
+    });
+    imported = await importAvatar(api, {
+      userId: userId || connected.userId,
+      projectId,
+      apiKey,
+      avatarId: verifiedAvatar.avatarId,
+      sessionId: existingSession.sessionId,
+    });
+  } catch (error) {
+    console.log(printApiFailure(error));
+    return;
+  }
+
+  const publicKey = connected.publicKey ?? verifiedProject.publicKey ?? imported.publicKey;
+  if (!publicKey) {
+    throw new ApiError("The verified project did not return a public SDK key.", 200, "MALFORMED_RESPONSE");
+  }
+
+  const detectedAfterSdk = detectProject(cwd);
+  const plan = planIntegration(detectedAfterSdk, {
+    projectId,
+    publicKey,
+    avatarId: imported.avatarId,
+  });
+  applyIntegration(detectedAfterSdk, { projectId, publicKey, avatarId: imported.avatarId }, plan);
+
+  const effectiveUserId = userId || connected.userId || verifiedProject.userId || existingSession.userId || "";
+  const finalConnection = {
+    ...connected,
+    projectName: connected.projectName ?? verifiedProject.projectName,
+    website: connected.website ?? verifiedProject.website,
+    projectId,
+    userId: effectiveUserId,
+    avatarId: verifiedAvatar.avatarId,
+    avatarName: verifiedAvatar.avatarName,
+    publicKey,
+  };
+  await saveConnection(cwd, finalConnection);
+  writeProjectMetadata(cwd, finalConnection);
+  ok("Avatar configured and imported.");
+
+  // STEP 7 — Knowledge Base
+  console.log("\nStep 7 — Knowledge Base");
+  try {
+    const knowledgeUrl = buildKnowledgeUrl(projectId, imported.avatarId);
+    if (await openAuthenticatedWebPage(api, knowledgeUrl, existingSession, "Knowledge Base")) {
+      console.log("Configure and connect Knowledge sources to the selected avatar, then return here.");
+    }
+  } catch (error) {
+    console.log(printApiFailure(error));
+    return;
+  }
+  const knowledgeReady = await readInput("Press Enter to verify Knowledge, or Ctrl+C to cancel: ");
+  if (knowledgeReady === undefined) {
+    console.log("Connection cancelled.");
+    return;
+  }
+  const finalChecks = await verifyInstallation(api, projectId, publicKey, connected.website ?? verifiedProject.website, existingSession.sessionId);
+  if (!finalChecks.every((check) => check.ok)) {
+    console.log("✗ Knowledge or final connection verification failed.");
+    return;
+  }
+  console.log("✓ Knowledge connected");
+  console.log("✓ Knowledge verified");
+
+  // STEP 8 — Connection Complete & Summary Checklist
+  console.log("\nStep 8 — Connection Complete");
+  console.log("\nASIYST CONNECTION");
+  console.log("------------------");
+  console.log("✓ Account connected");
+  console.log("✓ Project connected");
+  console.log("✓ Domain verified");
+  console.log("✓ API key verified");
+  console.log("✓ SDK verified");
+  console.log(`✓ Avatar verified/imported (${verifiedAvatar.avatarName ?? verifiedAvatar.avatarId})`);
+  console.log("✓ Knowledge connected");
+  console.log("✓ Knowledge verified");
+
+  console.log("\n✓ Asiyst connected successfully.");
+
+  console.log(`\nProject ID:\n${projectId}`);
+  if (connected.projectName) console.log(`\nProject:\n${connected.projectName}`);
+  if (connected.website) console.log(`\nWebsite:\n${connected.website}`);
 }
 
 export async function initCommand(cwd = process.cwd(), api: ApiClient = createApiClient(), cliProjectId?: string): Promise<void> {

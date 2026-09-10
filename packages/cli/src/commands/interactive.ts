@@ -298,7 +298,7 @@ class TerminalPanel {
       "",
     ];
     const suggestionRows = suggestions.slice(0, 5).map((item, index) =>
-      `${index === this.active ? ">" : " "} /${item.input.padEnd(18)} ${muted(item.label)}`);
+      `${index === this.active ? `${section("❯")} /${title(item.input.padEnd(18))}` : `  /${item.input.padEnd(18)}`} ${muted(item.label)}`);
     const inputWidth = Math.max(20, width - 4);
     const inputText = `${this.prompt}${input || "Type a command..."}`;
     const inputLine = inputText.length > inputWidth ? inputText.slice(-inputWidth) : inputText;

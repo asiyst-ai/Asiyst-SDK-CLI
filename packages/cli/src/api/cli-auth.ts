@@ -8,7 +8,7 @@ const LOGIN_EXCHANGE_TIMEOUT_MS = 30_000;
 export interface LoginChallenge {
   challengeId: string;
   browserSessionId: string;
-  authorizationUrl: string;
+  webLoginUrl: string;
   expiresAt?: string;
 }
 
@@ -77,19 +77,25 @@ export async function createLoginChallenge(api: ApiClient, input: { redirectUri:
     throw error;
   }
   const challengeId = text(body, "challengeId", "challenge_id", "id");
-  const authorizationUrl = text(body, "authorizationUrl", "authorization_url", "authUrl", "auth_url");
+  const webLoginUrl = text(body, "webLoginUrl", "web_login_url");
   if (!challengeId) throw new ApiError("The API did not return a login challenge.", 200, "MALFORMED_RESPONSE");
-  if (!authorizationUrl) throw new ApiError("Asiyst authentication response was invalid.", 200, "MALFORMED_RESPONSE");
+  if (!webLoginUrl) {
+    throw new ApiError(
+      "Asiyst authentication response did not include webLoginUrl.",
+      200,
+      "MALFORMED_RESPONSE",
+    );
+  }
   let browserSessionId = text(body, "browserSessionId", "browser_session_id", "sessionId", "session_id");
   if (!browserSessionId) {
     try {
-      browserSessionId = new URL(authorizationUrl).searchParams.get("browser_session_id")?.trim();
+      browserSessionId = new URL(webLoginUrl).searchParams.get("browser_session_id")?.trim();
     } catch {
       throw new ApiError("Asiyst authentication response was invalid.", 200, "MALFORMED_RESPONSE");
     }
   }
   if (!browserSessionId) browserSessionId = challengeId;
-  return { challengeId, browserSessionId, authorizationUrl, expiresAt: text(body, "expiresAt", "expires_at") };
+  return { challengeId, browserSessionId, webLoginUrl, expiresAt: text(body, "expiresAt", "expires_at") };
 }
 
 export async function pollLoginChallenge(api: ApiClient, challengeId: string): Promise<LoginChallengeStatus> {
