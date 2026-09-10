@@ -13,6 +13,7 @@ describe("API client", () => {
     const fetcher = vi.fn(async (_url: URL | RequestInfo, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
       expect(headers.get("Authorization")).toBe("Bearer cli-session");
+      expect(headers.get("X-Asiyst-Session")).toBe("cli-session");
       expect(JSON.parse(String(init?.body))).toEqual({ userId: "A7kP2m-Q9xL4nT8X" });
       return new Response(JSON.stringify({ sessionId: "onboarding-session", userId: "A7kP2m-Q9xL4nT8X" }), { status: 201 });
     });
@@ -152,6 +153,7 @@ describe("API base URL", () => {
         const headers = new Headers(init?.headers);
         expect(headers.get("Authorization")?.startsWith("Bearer ")).toBe(true);
         expect(headers.get("X-Asiyst-API-Key")).toBe(TEST_API_KEY);
+        expect(headers.get("X-Asiyst-Session")).toBe("cli-session");
         expect(JSON.parse(String(init?.body))).toEqual({
           userId: "A7kP2m-Q9xL4nT8X",
           projectId: "K8mP2xQ7_vL4N9cR5T1zB6Y3",
@@ -165,6 +167,7 @@ describe("API base URL", () => {
         projectId: "K8mP2xQ7_vL4N9cR5T1zB6Y3",
         apiKey: TEST_API_KEY,
         avatarId: "A7K9M2QX4P",
+        sessionId: "cli-session",
       })).resolves.toMatchObject({ imported: true, avatarId: "A7K9M2QX4P" });
     });
 

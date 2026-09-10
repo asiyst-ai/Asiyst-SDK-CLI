@@ -30,13 +30,13 @@ function record(value: unknown): Record<string, unknown> {
     throw new ApiError("Received an unexpected response from Asiyst.", 200, "MALFORMED_RESPONSE");
   }
   const root = value as Record<string, unknown>;
-  if (root.data && typeof root.data === "object" && !Array.isArray(root.data)) {
-    return root.data as Record<string, unknown>;
-  }
-  if (root.result && typeof root.result === "object" && !Array.isArray(root.result)) {
-    return root.result as Record<string, unknown>;
-  }
-  return root;
+  const data = root.data && typeof root.data === "object" && !Array.isArray(root.data)
+    ? root.data as Record<string, unknown>
+    : undefined;
+  const result = root.result && typeof root.result === "object" && !Array.isArray(root.result)
+    ? root.result as Record<string, unknown>
+    : undefined;
+  return { ...root, ...result, ...data };
 }
 
 function text(body: Record<string, unknown>, ...keys: string[]): string | undefined {
@@ -161,7 +161,11 @@ export async function consumeLoginChallenge(api: ApiClient, challengeId: string,
     if (exchangeTimer) clearTimeout(exchangeTimer);
   }
   const body = record(response);
-  const status = text(body, "status", "error", "code")?.toLowerCase();
+  const rawStatus = text(body, "status", "error", "code")
+    ?? (body.error && typeof body.error === "object" && !Array.isArray(body.error)
+      ? text(body.error as Record<string, unknown>, "status", "code", "type")
+      : undefined);
+  const status = rawStatus?.toLowerCase();
   if (body.success === false || body.authenticated === false) {
     if (status === "not_approved") throw new ApiError("Login authorization is still pending.", 409, "CONFLICT");
     if (status === "already_consumed" || status === "code_used") {
@@ -170,7 +174,11 @@ export async function consumeLoginChallenge(api: ApiClient, challengeId: string,
     if (status === "expired" || status === "code_expired") {
       throw new ApiError("Authorization code expired.", 401, "SESSION_EXPIRED");
     }
-    throw new ApiError("Asiyst authentication exchange failed.", 400, "CONFLICT");
+    throw new ApiError(
+      `Asiyst authentication exchange failed.${rawStatus ? ` Code: ${rawStatus}` : ""}`,
+      400,
+      "CONFLICT",
+    );
   }
   if (status === "not_approved") throw new ApiError("Login authorization is still pending.", 409, "CONFLICT");
   if (status === "already_consumed") throw new ApiError("This login request was already consumed.", 409, "CONFLICT");
@@ -198,6 +206,14 @@ export async function consumeLoginChallenge(api: ApiClient, challengeId: string,
     throw new ApiError("Asiyst authentication response was invalid.", 200, "MALFORMED_RESPONSE");
   }
   const normalizedUserId = userId && isValidUserId(userId) ? userId : undefined;
+  if (process.env.ASIIYST_DEBUG === "1" || process.env.ASIIYST_DEBUG === "true"
+    || process.env.ASIYST_DEBUG === "1" || process.env.ASIYST_DEBUG === "true") {
+    const token = sessionId;
+    console.error(`[asiyst-debug] CLI SESSION authenticated: true`);
+    console.error(`[asiyst-debug] token: ${token.slice(0, 4)}…${token.slice(-4)} (${token.length})`);
+    console.error(`[asiyst-debug] userId: ${normalizedUserId ?? "absent"}`);
+    console.error(`[asiyst-debug] expiresAt: ${text(body, "expiresAt", "expires_at", "expires") ?? "absent"}`);
+  }
   return {
     sessionId,
     refreshToken: nestedText(body, ["session", "cliSession"], "refreshToken", "refresh_token"),

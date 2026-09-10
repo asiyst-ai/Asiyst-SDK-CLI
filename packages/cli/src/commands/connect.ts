@@ -296,7 +296,13 @@ export async function connectCommand(cwd = process.cwd(), api = createApiClient(
         avatarId,
         sessionId: existingSession.sessionId,
       });
-      const imported = await importAvatar(api, { userId, projectId, apiKey, avatarId: verifiedAvatar.avatarId });
+      const imported = await importAvatar(api, {
+        userId,
+        projectId,
+        apiKey,
+        avatarId: verifiedAvatar.avatarId,
+        sessionId: existingSession.sessionId,
+      });
       const publicKey = connected.publicKey ?? verifiedProject.publicKey ?? imported.publicKey;
       if (!publicKey) {
         throw new ApiError("The verified project did not return a public SDK key.", 200, "MALFORMED_RESPONSE");

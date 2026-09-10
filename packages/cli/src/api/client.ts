@@ -9,18 +9,39 @@ function bodyErrorCode(body: unknown): string | undefined {
   const record = asRecord(body);
   const data = asRecord(record?.data);
   const error = asRecord(record?.error);
+  const dataError = asRecord(data?.error);
   const code = record?.code ?? record?.errorCode ?? record?.error
     ?? data?.code ?? data?.errorCode ?? data?.error
+    ?? dataError?.code
     ?? error?.code;
   return typeof code === "string" ? code.trim().toUpperCase() : undefined;
 }
 
 function bodyErrorMessage(body: unknown): string | undefined {
   const record = asRecord(body);
+  const data = asRecord(record?.data);
   const message = record?.message
     ?? (typeof record?.error === "string" ? record.error : undefined)
-    ?? asRecord(record?.error)?.message;
+    ?? asRecord(record?.error)?.message
+    ?? data?.message
+    ?? (typeof data?.error === "string" ? data.error : undefined)
+    ?? asRecord(data?.error)?.message;
   return typeof message === "string" && message.trim() ? message.trim() : undefined;
+}
+
+function safeToken(value: string | null | undefined): string {
+  if (!value) return "absent";
+  const token = value.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return "absent";
+  if (token.length <= 8) return `${token.slice(0, 2)}…(${token.length})`;
+  return `${token.slice(0, 4)}…${token.slice(-4)} (${token.length})`;
+}
+
+function debugRequest(path: string, headers: Headers): void {
+  if (!isDebugEnabled()) return;
+  console.error(`[asiyst-debug] REQUEST ${path}`);
+  console.error(`[asiyst-debug] Authorization: ${safeToken(headers.get("Authorization"))}`);
+  console.error(`[asiyst-debug] X-Asiyst-Session: ${safeToken(headers.get("X-Asiyst-Session"))}`);
 }
 
 function isAbortError(error: unknown): boolean {
@@ -42,6 +63,7 @@ export class ApiClient {
     const headers = new Headers(init?.headers);
     headers.set("Accept", "application/json");
     if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    debugRequest(path, headers);
     let response: Response;
     try {
       response = await this.fetcher(url, {
@@ -69,11 +91,18 @@ export class ApiClient {
     }
 
     if (!response.ok) {
-      const code = errorCodeFromStatus(response.status, bodyErrorCode(body));
+      const backendCode = bodyErrorCode(body);
+      const code = errorCodeFromStatus(response.status, backendCode);
+      if (isDebugEnabled()) {
+        console.error(`[asiyst-debug] RESPONSE ${response.status} ${path}`);
+        console.error(`[asiyst-debug] code: ${backendCode ?? "none"}`);
+        console.error(`[asiyst-debug] message: ${bodyErrorMessage(body) ?? "none"}`);
+      }
       if (code === "API_KEY_REVOKED" || bodyErrorCode(body) === "API_KEY_REVOKED") {
         throw new ApiError("This API key has been revoked.", response.status, "API_KEY_REVOKED");
       }
-      throw new ApiError(bodyErrorMessage(body) ?? `Asiyst API returned HTTP ${response.status}.`, response.status, code);
+      const message = bodyErrorMessage(body) ?? `Asiyst API returned HTTP ${response.status}.`;
+      throw new ApiError(backendCode ? `${message} (code: ${backendCode})` : message, response.status, code);
     }
 
     if (rawText && body === undefined) {

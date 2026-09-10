@@ -55,7 +55,10 @@ export async function createOnboardingSession(api: ApiClient, userId?: string, a
   try {
     body = record(await api.request<unknown>("/cli/onboarding/session", {
       method: "POST",
-      headers: authSessionId ? { Authorization: `Bearer ${authSessionId}` } : undefined,
+      headers: authSessionId ? {
+        Authorization: `Bearer ${authSessionId}`,
+        "X-Asiyst-Session": authSessionId,
+      } : undefined,
       body: JSON.stringify(verifiedUserId ? { userId: verifiedUserId } : {}),
     }));
   } catch (error) {

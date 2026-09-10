@@ -100,7 +100,12 @@ function assertVerified(body: Record<string, unknown>, message: string): void {
 }
 
 function sessionHeaders(sessionId?: string): HeadersInit {
-  return sessionId ? { Authorization: `Bearer ${sessionId}` } : {};
+  return sessionId
+    ? {
+        Authorization: `Bearer ${sessionId}`,
+        "X-Asiyst-Session": sessionId,
+      }
+    : {};
 }
 
 export async function verifyUser(api: ApiClient, userId: string, sessionId?: string): Promise<UserVerificationResult> {

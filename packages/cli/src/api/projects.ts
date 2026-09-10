@@ -11,6 +11,7 @@ export async function fetchProjectInfo(
   const value = await api.request<unknown>(`/cli/projects/${encodeURIComponent(projectId)}`, credentials ? {
     headers: {
       ...(credentials.sessionId ? { Authorization: `Bearer ${credentials.sessionId}` } : {}),
+      ...(credentials.sessionId ? { "X-Asiyst-Session": credentials.sessionId } : {}),
       ...(credentials.apiKey ? { "X-Asiyst-API-Key": credentials.apiKey } : {}),
       ...(credentials.userId ? { "X-Asiyst-User-ID": credentials.userId } : {}),
     },
@@ -59,7 +60,10 @@ export async function verifyInstallation(
 ): Promise<VerificationResult[]> {
   const value = await api.request<unknown>("/cli/verification", {
     method: "POST",
-    headers: sessionId ? { Authorization: `Bearer ${sessionId}` } : undefined,
+    headers: sessionId ? {
+      Authorization: `Bearer ${sessionId}`,
+      "X-Asiyst-Session": sessionId,
+    } : undefined,
     body: JSON.stringify({ projectId, publicKey, domain }),
   });
   if (!Array.isArray(value) || !value.every((item) => item && typeof item === "object" && typeof (item as Record<string, unknown>).name === "string" && typeof (item as Record<string, unknown>).ok === "boolean")) {

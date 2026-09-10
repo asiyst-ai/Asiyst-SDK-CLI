@@ -101,11 +101,18 @@ export async function loginCommand(): Promise<void> {
           accountEmail: consumed.accountEmail,
           expiresAt: consumed.expiresAt,
         };
+        if (!session.userId) {
+          throw new ApiError(
+            "CLI authentication succeeded but Asiyst did not return a User ID.",
+            200,
+            "MALFORMED_RESPONSE",
+          );
+        }
         console.log("⠋ Establishing CLI session...");
         try {
           await saveOnboardingSession(session);
           const stored = await loadOnboardingSession();
-          if (!stored || stored.sessionId !== session.sessionId) {
+          if (!stored || stored.sessionId !== session.sessionId || stored.userId !== session.userId) {
             throw new Error("Session was not persisted.");
           }
         } catch {
