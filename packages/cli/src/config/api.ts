@@ -2,6 +2,7 @@ export const PRODUCTION_API_ORIGIN = "https://nqhxpgsjofzqudyqkqib.supabase.co/f
 export const CLI_API_BASE_URL = PRODUCTION_API_ORIGIN;
 export const VERIFY_KEY_PATH = "/verify/api-key";
 export const VERIFY_KEY_URL = `${CLI_API_BASE_URL}${VERIFY_KEY_PATH}`;
+export const SDK_VERIFY_URL = `${CLI_API_BASE_URL}/cli/sdk/verify`;
 export const ASIYST_WEB_URL = "https://asiyst.com";
 export const ASIIYST_WEB_URL = ASIYST_WEB_URL;
 export const ASIYST_REGISTER_URL = `${ASIYST_WEB_URL}/register`;

@@ -18,6 +18,14 @@ export async function openBrowser(url: string): Promise<boolean> {
     await execFileAsync(command, args);
     return true;
   } catch {
-    return false;
+    if (process.platform !== "win32") return false;
+    try {
+      // Some Windows installations reject rundll32 for HTTPS URLs; use the
+      // shell's registered HTTPS handler as a safe fallback.
+      await execFileAsync("cmd.exe", ["/d", "/c", "start", "", url]);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

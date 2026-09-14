@@ -30,6 +30,7 @@ await Asiyst.init({
   publicKey: "<PUBLIC_KEY>",
   avatarId: "<PUBLIC_AVATAR_ID>",
 });
+Asiyst.open();
 ```
 
 Do not pass a secret API key as `publicKey` or omit `projectId`.

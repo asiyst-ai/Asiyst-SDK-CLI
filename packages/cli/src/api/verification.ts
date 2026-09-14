@@ -1,5 +1,6 @@
 import { isValidApiKey, isValidAvatarId, isValidProjectId, isValidUserId } from "../config/ids.js";
 import type { ConnectedProject } from "../types.js";
+import { ASIYST_WEB_URL, SDK_VERIFY_URL, isDebugEnabled } from "../config/api.js";
 import { ApiClient } from "./client.js";
 import { ApiError, type ApiErrorCode } from "./errors.js";
 
@@ -26,6 +27,11 @@ export interface AvatarVerificationResult {
 export interface ImportSessionResult {
   sessionId: string;
   expiresAt?: string;
+}
+
+export interface SdkVerificationResult {
+  projectId: string;
+  verifiedAt: string;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -102,10 +108,72 @@ function assertVerified(body: Record<string, unknown>, message: string): void {
 function sessionHeaders(sessionId?: string): HeadersInit {
   return sessionId
     ? {
-        Authorization: `Bearer ${sessionId}`,
+        Authorization: "Bearer " + sessionId,
         "X-Asiyst-Session": sessionId,
       }
     : {};
+}
+
+export async function verifySdk(
+  api: ApiClient,
+  input: { projectId: string; sessionId: string; publicKey?: string },
+): Promise<SdkVerificationResult> {
+  const projectId = assertValid(input.projectId, "Project ID", isValidProjectId);
+  if (!input.sessionId.trim()) {
+    throw new ApiError("Your Asiyst CLI session has expired or is invalid.", 401, "SESSION_EXPIRED");
+  }
+  let body: Record<string, unknown>;
+  try {
+    if (isDebugEnabled()) {
+      console.error("[asiyst-debug] SDK verification request: POST /cli/sdk/verify");
+      console.error(`[asiyst-debug] SDK verification projectId present: ${projectId ? "yes" : "no"}`);
+      console.error("[asiyst-debug] SDK verification body fields: projectId");
+    }
+    body = record(await api.request<unknown>(SDK_VERIFY_URL, {
+      method: "POST",
+      headers: {
+        ...sessionHeaders(input.sessionId),
+        ...(input.publicKey ? {
+          "X-Asiyst-Project-Id": projectId,
+          "X-Asiyst-Public-Key": input.publicKey,
+        } : {}),
+      },
+      body: JSON.stringify({ projectId }),
+    }));
+  } catch (error) {
+    if (error instanceof ApiError) {
+      if (error.code === "SDK_NOT_ACTIVE") {
+        throw new ApiError(
+          error.message || "The Asiyst SDK has not connected yet.",
+          error.status ?? 409,
+          "SDK_NOT_ACTIVE",
+        );
+      }
+      if (error.status === 401) throw new ApiError("Your Asiyst CLI session has expired or is invalid. Run /login and then /connect.", 401, "SESSION_EXPIRED");
+      if (error.status === 400) {
+        const detail = error.message && !/^Asiyst API returned HTTP 400\.?$/i.test(error.message)
+          ? ` ${error.message}`
+          : "";
+        throw new ApiError(`SDK verification request was rejected.${detail}`, 400, "INVALID_REQUEST");
+      }
+      if (error.status === 403) throw new ApiError("The SDK or project is not authorized for this Asiyst account.", 403, "FORBIDDEN");
+      if (error.status === 404) throw new ApiError("The selected project could not be found.", 404, "PROJECT_NOT_FOUND");
+      if (error.status === 409) throw new ApiError("The SDK is installed, but no recent SDK activity was detected. Make sure the SDK is initialized and connected, then retry verification.", 409, "CONFLICT");
+      if (error.status === 503) throw new ApiError("Unable to verify SDK because the Asiyst service is temporarily unavailable.", 503, "INTERNAL_ERROR");
+      if (error.code === "NETWORK" || error.code === "TIMEOUT") throw new ApiError("Unable to reach the Asiyst SDK verification service. Check your internet connection and try again.", error.status, error.code);
+    }
+    throw error;
+  }
+  const returnedProjectId = nestedStringValue(body, ["project"], "projectId", "project_id")
+    ?? (typeof body.projectId === "string" ? body.projectId : undefined);
+  const verifiedAt = stringValue(body, "verifiedAt", "verified_at");
+  if (body.success !== true || body.verified !== true || !returnedProjectId || !verifiedAt) {
+    throw new ApiError("Asiyst did not confirm SDK verification.", 200, "MALFORMED_RESPONSE");
+  }
+  if (returnedProjectId !== projectId) {
+    throw new ApiError("Asiyst verified a different project than the one selected.", 409, "PROJECT_MISMATCH");
+  }
+  return { projectId: returnedProjectId, verifiedAt };
 }
 
 export async function verifyUser(api: ApiClient, userId: string, sessionId?: string): Promise<UserVerificationResult> {
@@ -157,28 +225,67 @@ export async function verifyApiKeyRelationship(
 ): Promise<ConnectedProject> {
   const projectId = assertValid(input.projectId, "Project ID", isValidProjectId);
   const apiKey = assertValid(input.apiKey, "API key", isValidApiKey);
-  const verifiedUserId = input.userId && isValidUserId(input.userId) ? input.userId.trim() : undefined;
-  const body = record(await api.request<unknown>("/verify/api-key", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "X-Asiyst-API-Key": apiKey,
-      ...(input.sessionId ? { "X-Asiyst-Session": input.sessionId } : {}),
-    },
-    body: JSON.stringify({
-      ...(verifiedUserId ? { userId: verifiedUserId } : {}),
-      projectId,
-      apiKey,
-    }),
-  }));
-  assertVerified(body, "API key verification failed.");
-  const returnedUserId = nestedStringValue(body, ["user"], "userId", "user_id", "id");
-  const returnedProjectId = nestedStringValue(body, ["project"], "projectId", "project_id", "id");
-  if (returnedUserId && verifiedUserId && returnedUserId !== verifiedUserId) throw new ApiError("The API returned a different User ID.", 200, "USER_MISMATCH");
-  if (returnedProjectId && returnedProjectId !== projectId) throw new ApiError("The API returned a different Project ID.", 200, "PROJECT_MISMATCH");
+  let body: Record<string, unknown>;
+  try {
+    body = record(await api.request<unknown>(
+      `${ASIYST_WEB_URL}/api/v1/projects/${encodeURIComponent(projectId)}/api-key/verify`,
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer " + apiKey },
+        body: JSON.stringify({}),
+      },
+    ));
+  } catch (error) {
+    if (error instanceof ApiError) {
+      if (error.status === 401) {
+        throw new ApiError(
+          "Invalid, revoked, or expired Asiyst API key.\nPlease create/copy the secret API key again from Asiyst Dashboard → API Keys.",
+          401,
+          "INVALID_API_KEY",
+        );
+      }
+      if (error.status === 403) {
+        throw new ApiError(
+          "This API key does not belong to the selected project or you do not have access to this project.",
+          403,
+          "API_KEY_PROJECT_MISMATCH",
+        );
+      }
+      if (error.status === 400) {
+        throw new ApiError("The API key verification request is invalid.", 400, "INVALID_REQUEST");
+      }
+      if (error.status === 404) {
+        throw new ApiError("The selected project could not be found.", 404, "PROJECT_NOT_FOUND");
+      }
+      if (error.status === 405) {
+        throw new ApiError("API key verification is not available for this request.", 405, "INVALID_REQUEST");
+      }
+      if (error.status === 503) {
+        throw new ApiError("Unable to verify the Asiyst API key right now. Please try again.", 503, "INTERNAL_ERROR");
+      }
+      if (error.code === "NETWORK" || error.code === "TIMEOUT") {
+        throw new ApiError(
+          "Unable to reach Asiyst API for API-key verification. Check your internet connection and try again.",
+          error.status,
+          error.code,
+        );
+      }
+    }
+    throw error;
+  }
+  const returnedProjectId = nestedStringValue(body, ["project"], "projectId", "project_id", "id")
+    ?? (typeof body.projectId === "string" ? body.projectId : undefined);
+  const returnedUserId = nestedStringValue(body, ["user"], "userId", "user_id", "id")
+    ?? (typeof body.userId === "string" ? body.userId : undefined);
+  if (body.success !== true || body.valid !== true || !returnedProjectId) {
+    throw new ApiError("Received an invalid response while verifying the Asiyst API key.", 200, "MALFORMED_RESPONSE");
+  }
+  if (returnedProjectId !== projectId) {
+    throw new ApiError("This API key does not belong to the selected project or you do not have access to this project.", 403, "API_KEY_PROJECT_MISMATCH");
+  }
   return {
     apiKey,
-    userId: returnedUserId ?? verifiedUserId ?? "",
+    userId: returnedUserId ?? "",
     projectId,
     projectName: nestedStringValue(body, ["project"], "projectName", "project_name", "name"),
     website: nestedStringValue(body, ["project"], "website", "websiteUrl", "website_url", "domain"),
@@ -197,7 +304,7 @@ export async function verifyAvatar(
   const body = record(await api.request<unknown>("/verify/avatar", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: "Bearer " + apiKey,
       "X-Asiyst-API-Key": apiKey,
       ...(input.sessionId ? { "X-Asiyst-Session": input.sessionId } : {}),
     },
@@ -234,7 +341,7 @@ export async function createImportSession(
   const body = record(await api.request<unknown>("/import-session", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: "Bearer " + apiKey,
       "X-Asiyst-API-Key": apiKey,
       ...(input.sessionId ? { "X-Asiyst-Session": input.sessionId } : {}),
     },

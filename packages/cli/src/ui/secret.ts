@@ -1,7 +1,7 @@
 import { stdin, stdout } from "node:process";
 
-const BRACKETED_PASTE_START = "\x1b[200~";
-const BRACKETED_PASTE_END = "\x1b[201~";
+export const BRACKETED_PASTE_START = "\x1b[200~";
+export const BRACKETED_PASTE_END = "\x1b[201~";
 const ENABLE_BRACKETED_PASTE = "\x1b[?2004h";
 const DISABLE_BRACKETED_PASTE = "\x1b[?2004l";
 
@@ -99,7 +99,7 @@ export async function readSecret(prompt: string): Promise<string | undefined> {
       const action = consumeSecretInput(state, String(chunk));
       if (action.type === "cancel") {
         finish(undefined);
-        process.exit(130);
+        return;
       }
       if (action.type === "submit") {
         finish(action.value);
@@ -118,16 +118,28 @@ export async function readInput(prompt: string): Promise<string | undefined> {
   if (interactiveInputProvider) return interactiveInputProvider(prompt, false);
   if (!stdin.isTTY) return undefined;
   return new Promise((resolve) => {
-    let value = "";
+    let state: SecretInputState = { value: "", inBracketedPaste: false };
+    let settled = false;
+    const wasRaw = Boolean(stdin.isRaw);
+    stdout.write(ENABLE_BRACKETED_PASTE);
+    const finish = (result: string | undefined) => {
+      if (settled) return;
+      settled = true;
+      stdin.off("data", onData);
+      if (stdin.isTTY) stdin.setRawMode?.(wasRaw);
+      stdin.pause();
+      stdout.write(DISABLE_BRACKETED_PASTE);
+      stdout.write("\n");
+      resolve(result?.trim());
+    };
     const onData = (chunk: Buffer | string) => {
-      value += String(chunk);
-      const newline = value.search(/[\r\n]/);
-      if (newline >= 0) {
-        stdin.off("data", onData);
-        resolve(value.slice(0, newline).trim());
-      }
+      const action = consumeSecretInput(state, String(chunk));
+      if (action.type === "cancel") return finish(undefined);
+      if (action.type === "submit") return finish(action.value);
+      state = action.state;
     };
     stdout.write(prompt);
+    stdin.setRawMode?.(true);
     stdin.resume();
     stdin.on("data", onData);
   });

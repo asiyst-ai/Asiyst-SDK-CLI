@@ -1,8 +1,9 @@
-import { consumeLoginChallenge, createLoginChallenge, pollLoginChallenge } from "../api/cli-auth.js";
+import { consumeLoginChallenge, createLoginChallenge, pollLoginChallenge, validateExistingSession } from "../api/cli-auth.js";
 import { startCallbackServer, type BrowserCallback } from "../api/callback.js";
 import { openBrowser } from "../browser/open.js";
 import { ApiError } from "../api/errors.js";
 import { clearOnboardingSession, loadOnboardingSession, saveOnboardingSession } from "../config/credentials.js";
+import { getAuthenticatedSession } from "./authenticated.js";
 import { createApiClient } from "./shared.js";
 import type { OnboardingSession } from "../types.js";
 import { readCurrentVersion } from "../config/version.js";
@@ -15,21 +16,49 @@ export async function loginCommand(): Promise<void> {
   }
   loginInProgress = true;
   try {
-  const existing = await loadOnboardingSession();
-  if (existing && (!existing.expiresAt || Number.isNaN(Date.parse(existing.expiresAt)) || Date.parse(existing.expiresAt) > Date.now())) {
-    console.log("✓ Already logged in.");
-    console.log(`Account: ${existing.accountEmail ?? existing.userId ?? "authenticated Asiyst account"}`);
-    console.log("\nYou can use:");
-    console.log("  /connect");
-    console.log("  /status");
-    console.log("  /test");
-    console.log("  /validate");
-    console.log("  /deploy");
-    console.log("  /publish");
-    console.log("  /knowledge");
-    return;
+  const storedSession = await loadOnboardingSession();
+  const existing = await getAuthenticatedSession();
+  if (storedSession && !existing) {
+    console.log("⚠ Existing session expired or is invalid.");
+    console.log("→ Starting login...");
   }
-  if (existing) await clearOnboardingSession();
+  if (existing) {
+    console.log("⠋ Checking existing session...");
+    const validation = await validateExistingSession(createApiClient(), existing.sessionId);
+    if (validation.state === "valid") {
+      const account = validation.accountEmail ?? existing.accountEmail ?? validation.userId ?? existing.userId ?? "authenticated Asiyst account";
+      console.log("✓ Already logged in.");
+      console.log(`Account: ${account}`);
+      console.log("\nIf you want to sign in with a different account, run:");
+      console.log("  /logout");
+      console.log("\nYou can use:");
+      console.log("  /connect");
+      console.log("  /status");
+      console.log("  /test");
+      console.log("  /validate");
+      console.log("  /deploy");
+      console.log("  /publish");
+      console.log("  /knowledge");
+      return;
+    }
+    if (validation.state === "unavailable") {
+      const error = validation.error;
+      if (error.code === "NETWORK" || error.code === "TIMEOUT") {
+        throw new ApiError(
+          "Unable to reach Asiyst.\nCheck your internet connection and try again.",
+          error.status,
+          error.code,
+        );
+      }
+      throw new ApiError(
+        `Unable to verify the current Asiyst session: ${error.message}`,
+        error.status,
+        error.code,
+      );
+    }
+    await clearOnboardingSession();
+    console.log("→ Starting login...");
+  }
   const api = createApiClient();
   const callbackServer = await startCallbackServer();
   try {
@@ -133,6 +162,9 @@ export async function loginCommand(): Promise<void> {
   } catch (error) {
     if (error instanceof ApiError) {
       if (error.code === "NOT_FOUND") {
+        if (error.message.startsWith("Unable to verify the current Asiyst session:")) {
+          throw error;
+        }
         throw new ApiError("✕ Web authentication endpoint unavailable.", error.status, error.code);
       }
       if (error.code === "SESSION_EXPIRED") {

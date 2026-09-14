@@ -13,6 +13,12 @@ describe("browser callback server", () => {
       url.searchParams.set("state", callback.state);
       const response = await fetch(url);
       expect(response.status).toBe(200);
+      const html = await response.text();
+      expect(html).toContain("Authorization Successful");
+      expect(html).toContain("You have successfully authorized the Asiyst CLI.");
+      expect(html).toContain("ASIYST CLI");
+      expect(html).not.toContain("one-time-code");
+      expect(html).not.toContain("browser-session");
       await expect(result).resolves.toMatchObject({
         browserSessionId: "browser-session",
         code: "one-time-code",
@@ -37,6 +43,10 @@ describe("browser callback server", () => {
       url.searchParams.set("state", "wrong-state");
       const response = await fetch(url);
       expect(response.status).toBe(400);
+      const html = await response.text();
+      expect(html).toContain("Authorization Failed");
+      expect(html).toContain("could not be validated");
+      expect(html).not.toContain("one-time-code");
       await expect(result).resolves.toMatchObject({ rejected: true, error: { message: "Callback state mismatch." } });
     } finally {
       await callback.close();
@@ -48,6 +58,7 @@ describe("browser callback server", () => {
     try {
       const response = await fetch(`${callback.redirectUri}?state=${encodeURIComponent(callback.state)}`);
       expect(response.status).toBe(400);
+      expect(await response.text()).toContain("Authorization Failed");
     } finally {
       await callback.close();
     }

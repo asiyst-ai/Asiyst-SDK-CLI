@@ -37,9 +37,9 @@ function safeToken(value: string | null | undefined): string {
   return `${token.slice(0, 4)}…${token.slice(-4)} (${token.length})`;
 }
 
-function debugRequest(path: string, headers: Headers): void {
+function debugRequest(path: string, method: string, headers: Headers): void {
   if (!isDebugEnabled()) return;
-  console.error(`[asiyst-debug] REQUEST ${path}`);
+  console.error(`[asiyst-debug] REQUEST ${method.toUpperCase()} ${path}`);
   console.error(`[asiyst-debug] Authorization: ${safeToken(headers.get("Authorization"))}`);
   console.error(`[asiyst-debug] X-Asiyst-Session: ${safeToken(headers.get("X-Asiyst-Session"))}`);
 }
@@ -57,13 +57,13 @@ export class ApiClient {
   }
 
   async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const url = `${this.baseUrl}${path}`;
+    const url = /^https?:\/\//i.test(path) ? path : `${this.baseUrl}${path}`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     const headers = new Headers(init?.headers);
     headers.set("Accept", "application/json");
     if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-    debugRequest(path, headers);
+    debugRequest(path, init?.method ?? "GET", headers);
     let response: Response;
     try {
       response = await this.fetcher(url, {
@@ -97,6 +97,10 @@ export class ApiClient {
         console.error(`[asiyst-debug] RESPONSE ${response.status} ${path}`);
         console.error(`[asiyst-debug] code: ${backendCode ?? "none"}`);
         console.error(`[asiyst-debug] message: ${bodyErrorMessage(body) ?? "none"}`);
+      }
+
+      if (isDebugEnabled()) {
+        console.error(`[asiyst-debug] RESPONSE ${response.status} ${path}`);
       }
       if (code === "API_KEY_REVOKED" || bodyErrorCode(body) === "API_KEY_REVOKED") {
         throw new ApiError("This API key has been revoked.", response.status, "API_KEY_REVOKED");

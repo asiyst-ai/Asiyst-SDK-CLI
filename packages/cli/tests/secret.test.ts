@@ -37,6 +37,24 @@ describe("secret input", () => {
     });
   });
 
+  it("does not treat the bracketed paste start as Escape cancellation", () => {
+    const start = consumeSecretInput(
+      { value: "", inBracketedPaste: false },
+      "\x1b[200~proj_123",
+    );
+
+    expect(start).toEqual({
+      type: "continue",
+      state: { value: "proj_123", inBracketedPaste: true },
+    });
+    if (start.type !== "continue") return;
+
+    expect(consumeSecretInput(start.state, "\x1b[201~\r")).toEqual({
+      type: "submit",
+      value: "proj_123",
+    });
+  });
+
   it("supports long keys without terminal-width truncation", () => {
     const key = `asiyst_${"A1_b-".repeat(40)}`;
     const state = consumeSecretInput({ value: "", inBracketedPaste: false }, key);

@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiClient, ApiError } from "../src/api/client.js";
 import { parseVerifyKeyResponse, verifyApiKey } from "../src/api/auth.js";
-import { importAvatar } from "../src/api/projects.js";
+import { verifyApiKeyRelationship, verifySdk } from "../src/api/verification.js";
+import { fetchDomainVerificationStatus, importAvatar, setupSdkConfiguration } from "../src/api/projects.js";
 import { createOnboardingSession } from "../src/api/onboarding.js";
 import { resolveApiBaseUrl } from "../src/config/api.js";
 import { isValidApiKey, isValidProjectId, isValidPublicIdentifier, isValidUserId } from "../src/config/ids.js";
@@ -9,17 +10,326 @@ const TEST_API_KEY = "a".repeat(32);
 const TEST_PROJECT_ID = "K8mP2xQ7_vL4N9cR5T1zB6Y3";
 
 describe("API client", () => {
+  it("reuses or provisions SDK configuration using the authenticated session", async () => {
+    const fetcher = vi.fn(async (url: URL | RequestInfo, init?: RequestInit) => {
+      expect(String(url)).toBe("https://example.test/cli/onboarding/sdk/setup");
+      const headers = new Headers(init?.headers);
+      expect(headers.get("Authorization")).toBe("Bearer cli-session");
+      expect(headers.get("X-Asiyst-Session")).toBe("cli-session");
+      expect(JSON.parse(String(init?.body))).toEqual({ projectId: TEST_PROJECT_ID });
+      return new Response(JSON.stringify({
+        success: true,
+        projectId: TEST_PROJECT_ID,
+        sdk: { configured: true, key: "pk_sdk_public", created: false },
+      }), { status: 200 });
+    });
+    await expect(setupSdkConfiguration(
+      new ApiClient("https://example.test", fetcher),
+      TEST_PROJECT_ID,
+      "cli-session",
+    )).resolves.toEqual({
+      projectId: TEST_PROJECT_ID,
+      publicKey: "pk_sdk_public",
+      configured: true,
+      created: false,
+    });
+  });
+
+  it("rejects SDK setup responses without a usable project-bound key", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      success: true,
+      projectId: TEST_PROJECT_ID,
+      sdk: { configured: true },
+    }), { status: 200 }));
+    await expect(setupSdkConfiguration(
+      new ApiClient("https://example.test", fetcher),
+      TEST_PROJECT_ID,
+      "cli-session",
+    )).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
+  });
+
+  it("verifies SDK activity with the persisted CLI session and selected project", async () => {
+    const fetcher = vi.fn(async (url: URL | RequestInfo, init?: RequestInit) => {
+      expect(String(url)).toBe("https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api/cli/sdk/verify");
+      expect(new Headers(init?.headers).get("X-Asiyst-Session")).toBe("cli-session");
+      const headers = new Headers(init?.headers);
+      expect(headers.get("Authorization")).toBe("Bearer cli-session");
+      expect(JSON.parse(String(init?.body))).toEqual({ projectId: TEST_PROJECT_ID });
+      return new Response(JSON.stringify({
+        success: true,
+        verified: true,
+        projectId: TEST_PROJECT_ID,
+        verifiedAt: "2026-09-13T00:00:00Z",
+      }), { status: 200 });
+    });
+    await expect(verifySdk(new ApiClient("https://example.test", fetcher), {
+      projectId: TEST_PROJECT_ID,
+      sessionId: "cli-session",
+    })).resolves.toEqual({ projectId: TEST_PROJECT_ID, verifiedAt: "2026-09-13T00:00:00Z" });
+  });
+
+  it("preserves SDK_NOT_ACTIVE as a retryable SDK activity state", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      code: "SDK_NOT_ACTIVE",
+      message: "SDK activity has not been detected yet.",
+    }), { status: 400 }));
+    await expect(verifySdk(new ApiClient("https://example.test", fetcher), {
+      projectId: TEST_PROJECT_ID,
+      sessionId: "cli-session",
+    })).rejects.toMatchObject({
+      code: "SDK_NOT_ACTIVE",
+      message: "SDK activity has not been detected yet. (code: SDK_NOT_ACTIVE)",
+    });
+  });
+
+  it("rejects SDK verification when the server returns another project", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      success: true,
+      verified: true,
+      projectId: "A8mP2xQ7_vL4N9cR5T1zB6Y4",
+      verifiedAt: "2026-09-13T00:00:00Z",
+    }), { status: 200 }));
+    await expect(verifySdk(new ApiClient("https://example.test", fetcher), {
+      projectId: TEST_PROJECT_ID,
+      sessionId: "cli-session",
+    })).rejects.toMatchObject({ code: "PROJECT_MISMATCH", status: 409 });
+  });
+
+  it("rejects a successful SDK response without the canonical proof fields", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      success: true,
+      verified: true,
+      projectId: TEST_PROJECT_ID,
+    }), { status: 200 }));
+    await expect(verifySdk(new ApiClient("https://example.test", fetcher), {
+      projectId: TEST_PROJECT_ID,
+      sessionId: "cli-session",
+    })).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
+  });
+
+  it.each([
+    [400, "SDK verification request was rejected"],
+    [401, "Your Asiyst CLI session has expired"],
+    [403, "The SDK or project is not authorized"],
+    [404, "selected project could not be found"],
+    [409, "no recent SDK activity"],
+    [503, "temporarily unavailable"],
+  ])("maps SDK verification HTTP %i", async (status, message) => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ message: "failure" }), { status }));
+    await expect(verifySdk(new ApiClient("https://example.test", fetcher), {
+      projectId: TEST_PROJECT_ID,
+      sessionId: "cli-session",
+    })).rejects.toThrow(message);
+  });
+
+  it("maps SDK verification network failures without clearing session state", async () => {
+    const fetcher = vi.fn(async () => {
+      throw new Error("offline");
+    });
+    await expect(verifySdk(new ApiClient("https://example.test", fetcher), {
+      projectId: TEST_PROJECT_ID,
+      sessionId: "cli-session",
+    })).rejects.toThrow("Unable to reach the Asiyst SDK verification service");
+  });
+
+  it("verifies an API key against the selected project using only the API key bearer", async () => {
+    const fetcher = vi.fn(async (url: URL | RequestInfo, init?: RequestInit) => {
+      expect(String(url)).toBe(`https://asiyst.com/api/v1/projects/${TEST_PROJECT_ID}/api-key/verify`);
+      expect(init?.method).toBe("POST");
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer " + TEST_API_KEY);
+      expect(new Headers(init?.headers).has("X-Asiyst-Session")).toBe(false);
+      expect(JSON.parse(String(init?.body))).toEqual({});
+      return new Response(JSON.stringify({
+        success: true,
+        valid: true,
+        projectId: TEST_PROJECT_ID,
+        userId: "user123",
+      }), { status: 200 });
+    });
+
+    await expect(verifyApiKeyRelationship(
+      new ApiClient("https://example.test", fetcher),
+      { projectId: TEST_PROJECT_ID, apiKey: TEST_API_KEY, sessionId: "cli-session", userId: "ignored" },
+    )).resolves.toMatchObject({ projectId: TEST_PROJECT_ID, userId: "user123" });
+  });
+
+  it.each([
+    [401, "INVALID_API_KEY", "Invalid, revoked, or expired Asiyst API key."],
+    [403, "API_KEY_PROJECT_MISMATCH", "This API key does not belong to the selected project or you do not have access to this project."],
+    [400, "INVALID_REQUEST", "The API key verification request is invalid."],
+    [404, "PROJECT_NOT_FOUND", "The selected project could not be found."],
+    [405, "INVALID_REQUEST", "API key verification is not available for this request."],
+    [503, "INTERNAL_ERROR", "Unable to verify the Asiyst API key right now. Please try again."],
+  ])("classifies API-key verification HTTP %i as %s with correct message", async (status, code, messageSnippet) => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ message: "failure" }), { status }));
+    const promise = verifyApiKeyRelationship(
+      new ApiClient("https://example.test", fetcher),
+      { projectId: TEST_PROJECT_ID, apiKey: TEST_API_KEY },
+    );
+    await expect(promise).rejects.toMatchObject({ status, code });
+    await expect(promise).rejects.toThrow(messageSnippet);
+  });
+
+  it("handles network failures during API-key verification with specific message", async () => {
+    const fetcher = vi.fn(async () => {
+      throw new Error("fetch failed");
+    });
+    const promise = verifyApiKeyRelationship(
+      new ApiClient("https://example.test", fetcher),
+      { projectId: TEST_PROJECT_ID, apiKey: TEST_API_KEY },
+    );
+    await expect(promise).rejects.toMatchObject({ code: "NETWORK" });
+    await expect(promise).rejects.toThrow("Unable to reach Asiyst API for API-key verification.");
+  });
+
+  it("rejects returned projectId mismatch during API-key verification", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      success: true,
+      valid: true,
+      projectId: "OTHER_PROJECT_ID_12345678",
+      userId: "user123",
+    }), { status: 200 }));
+    const promise = verifyApiKeyRelationship(
+      new ApiClient("https://example.test", fetcher),
+      { projectId: TEST_PROJECT_ID, apiKey: TEST_API_KEY },
+    );
+    await expect(promise).rejects.toMatchObject({ status: 403, code: "API_KEY_PROJECT_MISMATCH" });
+    await expect(promise).rejects.toThrow("This API key does not belong to the selected project");
+  });
+
+  it("rejects malformed or non-success API-key verification responses", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      success: false,
+      valid: false,
+    }), { status: 200 }));
+    const promise = verifyApiKeyRelationship(
+      new ApiClient("https://example.test", fetcher),
+      { projectId: TEST_PROJECT_ID, apiKey: TEST_API_KEY },
+    );
+    await expect(promise).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
+    await expect(promise).rejects.toThrow("Received an invalid response while verifying the Asiyst API key.");
+  });
+
+  it("validates project ID and API key format before sending network request", async () => {
+    const fetcher = vi.fn();
+    await expect(verifyApiKeyRelationship(
+      new ApiClient("https://example.test", fetcher),
+      { projectId: "invalid", apiKey: TEST_API_KEY },
+    )).rejects.toMatchObject({ status: 400 });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("checks domain verification through the authenticated status endpoint", async () => {
+    const fetcher = vi.fn(async (url: URL | RequestInfo, init?: RequestInit) => {
+      expect(String(url)).toBe("https://example.test/cli/onboarding/domain-verification/status?projectId=project123");
+      expect(init?.method).toBe("GET");
+      const headers = new Headers(init?.headers);
+      expect(headers.get("Authorization")).toBe("Bearer cli-session");
+      expect(headers.get("X-Asiyst-Session")).toBe("cli-session");
+      expect(init?.body).toBeUndefined();
+      return new Response(JSON.stringify({
+        success: true,
+        verified: true,
+        status: "verified",
+        projectId: "project123",
+        domain: "example.com",
+        verifiedAt: "2026-09-12T00:00:00Z",
+      }), { status: 200 });
+    });
+
+    await expect(fetchDomainVerificationStatus(
+      new ApiClient("https://example.test", fetcher),
+      "project123",
+      "cli-session",
+    )).resolves.toEqual({
+      success: true,
+      verified: true,
+      status: "verified",
+      projectId: "project123",
+      domain: "example.com",
+      verifiedAt: "2026-09-12T00:00:00Z",
+    });
+  });
+
+  it("accepts a pending domain verification response", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      success: true,
+      verified: false,
+      status: "pending",
+      projectId: "project123",
+    }), { status: 200 }));
+    await expect(fetchDomainVerificationStatus(
+      new ApiClient("https://example.test", fetcher),
+      "project123",
+      "cli-session",
+    )).resolves.toMatchObject({ success: true, verified: false });
+  });
+
+  it("preserves failed and expired verification details", async () => {
+    const responses = [
+      {
+        success: true,
+        verified: false,
+        status: "failed",
+        projectId: "project123",
+        domain: "example.com",
+        errorCode: "DOMAIN_VERIFICATION_FAILED",
+        message: "The DNS record did not match.",
+      },
+      {
+        success: true,
+        verified: false,
+        status: "expired",
+        projectId: "project123",
+        domain: "example.com",
+        errorCode: "DOMAIN_VERIFICATION_EXPIRED",
+        message: "The domain verification challenge expired.",
+      },
+    ];
+    let index = 0;
+    const fetcher = vi.fn(async () => new Response(JSON.stringify(responses[index++]), { status: 200 }));
+    const api = new ApiClient("https://example.test", fetcher);
+
+    await expect(fetchDomainVerificationStatus(api, "project123", "cli-session")).resolves.toMatchObject(responses[0]);
+    await expect(fetchDomainVerificationStatus(api, "project123", "cli-session")).resolves.toMatchObject(responses[1]);
+  });
+
+  it.each([
+    [401, "SESSION_EXPIRED"],
+    [400, "INVALID_PROJECT_ID"],
+    [403, "FORBIDDEN"],
+    [404, "PROJECT_NOT_FOUND"],
+    [405, "INVALID_REQUEST"],
+    [503, "INTERNAL_ERROR"],
+  ])("classifies domain verification status HTTP %i as %s", async (status, code) => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ message: "status failure" }), { status }));
+    await expect(fetchDomainVerificationStatus(
+      new ApiClient("https://example.test", fetcher),
+      "project123",
+      "cli-session",
+    )).rejects.toMatchObject({ status, code });
+  });
+
+  it("does not make a request without a project ID", async () => {
+    const fetcher = vi.fn();
+    await expect(fetchDomainVerificationStatus(
+      new ApiClient("https://example.test", fetcher),
+      "",
+      "cli-session",
+    )).rejects.toMatchObject({ status: 400, code: "INVALID_PROJECT_ID" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("creates an onboarding session with the authenticated CLI session", async () => {
     const fetcher = vi.fn(async (_url: URL | RequestInfo, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
       expect(headers.get("Authorization")).toBe("Bearer cli-session");
       expect(headers.get("X-Asiyst-Session")).toBe("cli-session");
-      expect(JSON.parse(String(init?.body))).toEqual({ userId: "A7kP2m-Q9xL4nT8X" });
+      expect(JSON.parse(String(init?.body))).toEqual({});
       return new Response(JSON.stringify({ sessionId: "onboarding-session", userId: "A7kP2m-Q9xL4nT8X" }), { status: 201 });
     });
     await expect(createOnboardingSession(
       new ApiClient("https://example.test", fetcher),
-      "A7kP2m-Q9xL4nT8X",
       "cli-session",
     )).resolves.toMatchObject({ sessionId: "onboarding-session" });
   });

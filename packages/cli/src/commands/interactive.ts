@@ -5,7 +5,12 @@ import { detectProject } from "../detection/project.js";
 import { muted, section, symbols, title, success } from "../ui/format.js";
 import { readCurrentVersion } from "../config/version.js";
 import { setInteractiveInputProvider } from "../ui/secret.js";
-import { setInteractiveSelector } from "../ui/selector.js";
+import {
+  BRACKETED_PASTE_END,
+  BRACKETED_PASTE_START,
+  consumeSecretInput,
+  type SecretInputState,
+} from "../ui/secret.js";
 import { connectCommand } from "./connect.js";
 import { disconnectCommand } from "./disconnect.js";
 import { healthCommand } from "./health.js";
@@ -28,6 +33,8 @@ import { createApiClient } from "./shared.js";
 import { verifyApiKeyRelationship, verifyAvatar } from "../api/verification.js";
 import { pushCommand } from "./push.js";
 import { clearCommand } from "./clear.js";
+import { parseProjectIdArgument } from "../config/ids.js";
+import { setInteractiveSelector, type SelectorOption } from "../ui/selector.js";
 
 type SlashHandler = (args: string[]) => Promise<void> | void;
 type CommandEntry = { input: string; label: string };
@@ -59,7 +66,7 @@ const HELP: Record<string, string> = {
   sdk: "Verify the local SDK integration.",
   diagnose: "Run diagnostics for the CLI, project, credentials, and API.",
   exit: "Exit interactive mode.",
-  login: "Log in to your Asiyst account using browser authorization. The browser returns to the CLI, which validates the authorization and establishes a secure session.",
+  login: "Sign in to your Asiyst account. Existing sessions are checked and reused; expired sessions are replaced through browser authorization.",
   logout: "Log out of Asiyst.",
   test: "Test the Asiyst integration.",
   validate: "Validate project and SDK configuration.",
@@ -108,6 +115,11 @@ class TerminalPanel {
   private secret = false;
   private active = 0;
   private suggestionsOpen = false;
+  private selection?: {
+    question: string;
+    options: SelectorOption<unknown>[];
+    active: number;
+  };
   private status: LandingStatus = { authenticated: false, connected: false, avatar: false, provider: false };
 
   setStatus(status: LandingStatus): void {
@@ -172,6 +184,7 @@ class TerminalPanel {
     this.suggestionsOpen = false;
     this.render();
     return new Promise((resolve) => {
+      let pasteState: SecretInputState = { value: this.editor, inBracketedPaste: false };
       const finish = (value: string | undefined) => {
         stdin.off("keypress", onKeypress);
         stdout.off("resize", onResize);
@@ -188,6 +201,21 @@ class TerminalPanel {
       };
       const onResize = () => this.render();
       const onKeypress = (chunk: string, key: { name?: string; ctrl?: boolean; sequence?: string }) => {
+        const sequence = key.sequence || chunk;
+        if (
+          pasteState.inBracketedPaste
+          || sequence.includes(BRACKETED_PASTE_START)
+          || sequence.includes(BRACKETED_PASTE_END)
+        ) {
+          const action = consumeSecretInput(pasteState, sequence);
+          if (action.type === "cancel") return finish(undefined);
+          if (action.type === "submit") return finish(action.value);
+          pasteState = action.state;
+          this.editor = pasteState.value;
+          this.active = 0;
+          this.suggestionsOpen = this.editor.startsWith("/");
+          return this.render();
+        }
         if (key.ctrl && key.name === "c") return finish(undefined);
         if (key.ctrl && key.name === "l") {
           this.clear();
@@ -246,9 +274,9 @@ class TerminalPanel {
           }
           return finish(this.editor);
         }
-        const sequence = key.sequence || chunk;
         if (sequence && /^[\x20-\x7e]+$/.test(sequence)) {
           this.editor += sequence;
+          pasteState = { value: this.editor, inBracketedPaste: false };
           this.active = 0;
           this.suggestionsOpen = this.editor.startsWith("/");
           this.render();
@@ -257,6 +285,36 @@ class TerminalPanel {
       stdin.on("keypress", onKeypress);
       stdout.on("resize", onResize);
       this.render();
+    });
+  }
+
+  async select(question: string, options: SelectorOption<unknown>[]): Promise<unknown | undefined> {
+    if (!options.length) return undefined;
+    this.selection = { question, options, active: 0 };
+    this.render();
+    return new Promise((resolve) => {
+      const finish = (value: unknown | undefined) => {
+        stdin.off("keypress", onKeypress);
+        this.selection = undefined;
+        this.render();
+        resolve(value);
+      };
+      const onKeypress = (chunk: string, key: { name?: string; ctrl?: boolean }) => {
+        if (key.ctrl && key.name === "c") return finish(undefined);
+        if (key.name === "escape") return finish(undefined);
+        if (key.name === "up" || chunk === "k") {
+          this.selection!.active = Math.max(0, this.selection!.active - 1);
+          return this.render();
+        }
+        if (key.name === "down" || chunk === "j") {
+          this.selection!.active = Math.min(this.selection!.options.length - 1, this.selection!.active + 1);
+          return this.render();
+        }
+        if (key.name === "return" || key.name === "enter") {
+          return finish(this.selection!.options[this.selection!.active]?.value);
+        }
+      };
+      stdin.on("keypress", onKeypress);
     });
   }
 
@@ -299,6 +357,16 @@ class TerminalPanel {
     ];
     const suggestionRows = suggestions.slice(0, 5).map((item, index) =>
       `${index === this.active ? `${section("❯")} /${title(item.input.padEnd(18))}` : `  /${item.input.padEnd(18)}`} ${muted(item.label)}`);
+    const selectionRows = this.selection
+      ? [
+        this.selection.question,
+        "",
+        ...this.selection.options.map((option, index) =>
+          index === this.selection!.active
+            ? `${section("❯")} ${title(option.label)}`
+            : `  ${option.label}`),
+      ]
+      : [];
     const inputWidth = Math.max(20, width - 4);
     const inputText = `${this.prompt}${input || "Type a command..."}`;
     const inputLine = inputText.length > inputWidth ? inputText.slice(-inputWidth) : inputText;
@@ -313,7 +381,11 @@ class TerminalPanel {
     const visibleSuggestions = suggestionSpace > 0
       ? suggestionRows.slice(0, Math.min(5, suggestionSpace))
       : [];
-    const footer = visibleSuggestions.length ? [...visibleSuggestions, "", ...inputBox] : inputBox;
+    const footer = selectionRows.length
+      ? [...selectionRows, "", ...inputBox]
+      : visibleSuggestions.length
+        ? [...visibleSuggestions, "", ...inputBox]
+        : inputBox;
     const maxHeaderRows = Math.max(0, height - footer.length);
     const visibleHeader = header.slice(0, maxHeaderRows);
     const contentHeight = Math.max(0, height - visibleHeader.length - footer.length);
@@ -347,7 +419,7 @@ const ROUTES: Record<string, SlashHandler> = {
   project: async (args) => { if (await requireAuthenticated()) await projectCommand(process.cwd(), args); },
   avatar: async (args) => { if (await requireAuthenticated()) await avatarCommand(process.cwd(), args); },
   knowledge: (args) => knowledgeCommand(process.cwd(), args),
-  connect: (args) => connectCommand(process.cwd(), undefined, args[0]),
+  connect: (args) => connectCommand(process.cwd(), undefined, parseProjectIdArgument(args)),
   disconnect: () => disconnectCommand(),
   update: () => updateCommand(),
   config: (args) => configCommand(process.cwd(), args),
@@ -425,19 +497,7 @@ export async function interactiveHome(): Promise<void> {
     panel.render();
   };
   setInteractiveInputProvider((prompt, secret) => panel.read(prompt, secret));
-  setInteractiveSelector(async (titleText, options) => {
-    panel.append(`${titleText}\n${options.map((option, index) => `${index + 1}. ${option.label}`).join("\n")}`);
-    panel.render();
-    const answer = await panel.read("asiyst › ", false);
-    if (answer === undefined) return undefined;
-    const index = Number.parseInt(answer, 10);
-    if (Number.isInteger(index) && index >= 1 && index <= options.length) return options[index - 1].value;
-    const normalized = answer.trim().toLowerCase();
-    return options.find((option) => option.label.toLowerCase() === normalized
-      || option.label.toLowerCase().startsWith(normalized)
-      || (normalized === "y" && option.label.toLowerCase().startsWith("yes"))
-      || (normalized === "n" && option.label.toLowerCase().startsWith("no")))?.value;
-  });
+  setInteractiveSelector((question, options) => panel.select(question, options));
   stdin.setRawMode?.(true);
   stdin.resume();
   panel.render();

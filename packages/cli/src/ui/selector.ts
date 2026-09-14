@@ -9,7 +9,7 @@ export interface SelectorOption<T> {
 }
 
 export type SelectorResult<T> = { type: "selected"; value: T } | { type: "cancelled" | "exit" };
-type InteractiveSelector = (title: string, options: SelectorOption<unknown>[]) => Promise<unknown | undefined>;
+export type InteractiveSelector = (title: string, options: SelectorOption<unknown>[]) => Promise<unknown | undefined>;
 let interactiveSelector: InteractiveSelector | undefined;
 
 export function setInteractiveSelector(provider: InteractiveSelector | undefined): void {
@@ -109,11 +109,7 @@ export function selectOption<T>(question: string, options: SelectorOption<T>[]):
     const onKeypress = (chunk: string, key: { name?: string; ctrl?: boolean; sequence?: string } | undefined) => {
       if (!key) return;
       if (key.ctrl && key.name === "c") {
-        clearSelectorFrame(stdout, renderedLines);
-        restoreTerminal(wasRaw);
-        stdin.pause();
-        stdout.write("\n");
-        process.exit(130);
+        return finish({ type: "cancelled" });
       }
       if (key.name === "escape") return finish({ type: "cancelled" });
       if (key.name === "up" || chunk === "k") {
@@ -139,4 +135,3 @@ export function selectOption<T>(question: string, options: SelectorOption<T>[]):
     render();
   });
 }
-

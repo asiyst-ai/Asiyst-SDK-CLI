@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { dirname, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import type { ProjectDetection } from "../types.js";
+import { resolveApplicationEntryPoint } from "../detection/project.js";
 
 const execFileAsync = promisify(execFile);
 const MARKER_START = "// ASIIYST CLI START";
@@ -11,7 +12,7 @@ const MARKER_END = "// ASIIYST CLI END";
 export interface IntegrationValues {
   projectId: string;
   publicKey: string;
-  avatarId: string;
+  avatarId?: string;
 }
 
 export interface IntegrationPlan {
@@ -38,17 +39,25 @@ export interface IntegrationStatus {
   avatarId?: string;
 }
 
+function isSdkInstalled(project: ProjectDetection): boolean {
+  return project.sdkInstalled ?? Boolean(project.sdkVersion);
+}
+
 function componentSource(values: IntegrationValues, extension: "tsx" | "jsx" | "ts" | "js"): string {
+  const avatarOption = values.avatarId ? `\n  avatarId: ${JSON.stringify(values.avatarId)},` : "";
   if (extension === "ts" || extension === "js") {
     return `${MARKER_START}
 import { Asiyst } from "@asiyst/sdk";
 
-void Asiyst.init({
+void (async () => {
+  await Asiyst.init({
   projectId: ${JSON.stringify(values.projectId)},
   publicKey: ${JSON.stringify(values.publicKey)},
-  avatarId: ${JSON.stringify(values.avatarId)},
+  ${avatarOption ? avatarOption.trim() : ""}
   position: "bottom-right",
-});
+  });
+  Asiyst.open();
+})();
 ${MARKER_END}
 `;
   }
@@ -65,12 +74,15 @@ export function AsiystAssistant() {
   React.useEffect(() => {
     if (asiystStarted) return;
     asiystStarted = true;
-    void Asiyst.init({
-      projectId: ${JSON.stringify(values.projectId)},
-      publicKey: ${JSON.stringify(values.publicKey)},
-      avatarId: ${JSON.stringify(values.avatarId)},
-      position: "bottom-right",
-    }).catch((error) => {
+    void (async () => {
+      await Asiyst.init({
+        projectId: ${JSON.stringify(values.projectId)},
+        publicKey: ${JSON.stringify(values.publicKey)},
+        ${avatarOption ? avatarOption.trim() : ""}
+        position: "bottom-right",
+      });
+      Asiyst.open();
+    })().catch((error) => {
       asiystStarted = false;
       console.error("Asiyst failed to initialize.", error);
     });
@@ -112,10 +124,8 @@ function pathsFor(project: ProjectDetection): { component: string; entry?: strin
     if (pagesEntry) return { component, entry: pagesEntry, extension: pagesEntry.endsWith(".tsx") ? "tsx" : "jsx" };
     return { component, extension };
   }
-  const entry = findFirst(project.cwd, [
-    "src/main.tsx", "src/main.jsx", "src/main.ts", "src/main.js",
-    "src/index.tsx", "src/index.jsx", "src/index.ts", "src/index.js",
-  ]);
+  const resolved = resolveApplicationEntryPoint(project.cwd, project.framework, project.language);
+  const entry = resolved.entryPoint ? resolve(project.cwd, resolved.entryPoint) : undefined;
   return { component, entry, extension: entry?.endsWith(".tsx") || entry?.endsWith(".ts") ? "tsx" : "jsx" };
 }
 
@@ -137,8 +147,8 @@ function updateComponent(path: string, source: string, values: IntegrationValues
   const replacements: Record<string, string> = {
     projectId: JSON.stringify(values.projectId),
     publicKey: JSON.stringify(values.publicKey),
-    avatarId: JSON.stringify(values.avatarId),
   };
+  if (values.avatarId) replacements.avatarId = JSON.stringify(values.avatarId);
   let next = source;
   for (const [name, value] of Object.entries(replacements)) {
     const pattern = new RegExp(`(${name}\\s*:\\s*)["'\`][^"'\`]+["'\`]`);
@@ -161,7 +171,7 @@ function updateEntry(path: string, componentPath: string): "update" | "unchanged
   const importLine = componentPath.endsWith(".ts") || componentPath.endsWith(".js")
     ? `import "./${importPath}";`
     : `import { AsiystAssistant } from "./${importPath}";`;
-  const hasImport = current.includes("AsiystAssistant") && current.includes("@asiyst/sdk");
+  const hasImport = current.includes("AsiystAssistant");
   const nextImport = hasImport ? current : `${importLine}\n${current}`;
   const componentPattern = /<AsiystAssistant\s*\/>/;
   let next = componentPattern.test(nextImport) ? nextImport : nextImport;
@@ -172,6 +182,8 @@ function updateEntry(path: string, componentPath: string): "update" | "unchanged
       next = nextImport.replace(/<App\s*\/>/, "<><AsiystAssistant /><App /></>");
     } else if (/<Component\s+\{\.\.\.pageProps\}\s*\/>/.test(nextImport)) {
       next = nextImport.replace(/<Component\s+\{\.\.\.pageProps\}\s*\/>/, "<><AsiystAssistant /><Component {...pageProps} /></>");
+    } else if (/\<Outlet\s*\/>/.test(nextImport)) {
+      next = nextImport.replace(/<Outlet\s*\/>/, "<><AsiystAssistant /><Outlet /></>");
     } else if (componentPath.endsWith(".ts") || componentPath.endsWith(".js")) {
       next = nextImport;
     } else {
@@ -184,16 +196,16 @@ function updateEntry(path: string, componentPath: string): "update" | "unchanged
 }
 
 export function planIntegration(project: ProjectDetection, values: IntegrationValues): IntegrationPlan {
-  if (!values.projectId || !values.publicKey || !values.avatarId) {
-    throw new Error("Verified projectId, publicKey, and avatarId are required before configuring the SDK.");
+  if (!values.projectId || !values.publicKey) {
+    throw new Error("Verified projectId and publicKey are required before configuring the SDK.");
   }
   const paths = pathsFor(project);
   const componentPath = resolve(project.cwd, paths.component);
   const entryPath = paths.entry;
-  if (!entryPath && !project.framework.startsWith("Vanilla") && project.framework !== "Next.js" && project.framework !== "React" && project.framework !== "Vite") {
+  if (!entryPath) {
     return {
       framework: project.framework,
-      sdkInstalled: Boolean(project.sdkVersion),
+      sdkInstalled: isSdkInstalled(project),
       sdkVersion: project.sdkVersion,
       componentPath,
       componentAction: existsSync(componentPath) ? "update" : "create",
@@ -203,7 +215,7 @@ export function planIntegration(project: ProjectDetection, values: IntegrationVa
   }
   return {
     framework: project.framework,
-    sdkInstalled: Boolean(project.sdkVersion),
+    sdkInstalled: isSdkInstalled(project),
     sdkVersion: project.sdkVersion,
     componentPath,
     entryPath,
@@ -282,7 +294,7 @@ function extractIntegrationValues(source: string): Partial<IntegrationValues> {
 }
 
 export function inspectIntegration(project: ProjectDetection): IntegrationStatus {
-  if (!project.sdkVersion) {
+  if (!isSdkInstalled(project)) {
     return { sdkInstalled: false, initialized: false };
   }
   const paths = pathsFor(project);
@@ -294,13 +306,14 @@ export function inspectIntegration(project: ProjectDetection): IntegrationStatus
       if (entry.name === "node_modules" || entry.name === ".git" || entry.name === "dist" || entry.name === "build") continue;
       const path = join(directory, entry.name);
       if (entry.isDirectory()) visit(path, depth + 1);
-      else if (/\.(js|jsx|ts|tsx|mjs|cjs)$/.test(entry.name)) files.push(path);
+      else if (/\.(js|jsx|ts|tsx|mjs|cjs)$/.test(entry.name) && !/\.test\.[cm]?[jt]sx?$/.test(entry.name)) files.push(path);
     }
   };
   visit(project.cwd, 0);
   if (existsSync(componentPath) && !files.includes(componentPath)) files.unshift(componentPath);
   const sources = files.map((path) => ({ path, source: read(path) }));
-  const initializedSource = sources.find(({ source }) => /Asiyst\.init\s*\(/.test(source));
+  const initializedSource = sources.find(({ source }) =>
+    /Asiyst\.init\s*\(/.test(source) && Boolean(extractIntegrationValues(source).projectId));
   if (!initializedSource) {
     return { sdkInstalled: true, sdkVersion: project.sdkVersion, initialized: false };
   }

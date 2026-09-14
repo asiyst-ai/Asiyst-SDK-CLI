@@ -3,7 +3,12 @@ import type { OnboardingSession } from "../types.js";
 
 export async function getAuthenticatedSession(): Promise<OnboardingSession | undefined> {
   const session = await loadOnboardingSession();
-  if (session?.expiresAt && !Number.isNaN(Date.parse(session.expiresAt)) && Date.parse(session.expiresAt) <= Date.now()) {
+  const expiresAt = session?.expiresAt
+    ? /^\d+$/.test(session.expiresAt)
+      ? Number(session.expiresAt) * (session.expiresAt.length <= 10 ? 1000 : 1)
+      : Date.parse(session.expiresAt)
+    : undefined;
+  if (expiresAt !== undefined && !Number.isNaN(expiresAt) && expiresAt <= Date.now()) {
     await clearOnboardingSession();
     return undefined;
   }

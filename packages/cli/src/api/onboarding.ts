@@ -1,6 +1,5 @@
 import { ApiClient } from "./client.js";
 import { ApiError } from "./errors.js";
-import { isValidUserId } from "../config/ids.js";
 import type { OnboardingSession } from "../types.js";
 
 function record(value: unknown): Record<string, unknown> {
@@ -23,28 +22,30 @@ function stringValue(body: Record<string, unknown>, ...keys: string[]): string |
 
 function sessionHeaders(sessionId: string): HeadersInit {
   return {
-    Authorization: `Bearer ${sessionId}`,
+    Authorization: "Bearer " + sessionId,
     "X-Asiyst-Session": sessionId,
   };
 }
 
 export interface WebHandoff {
   token: string;
+  url?: string;
   expiresAt?: string;
 }
 
 const ALLOWED_DESTINATIONS = new Set([
   "/dashboard",
   "/dashboard/profile",
-  "/project/new",
+  "/dashboard/projects",
   "/projects/new",
   "/dashboard/projects",
   "/dashboard/projects/new",
   "/dashboard/avatar-studio",
   "/dashboard/knowledge",
-  "/dashboard/sdk-installation",
-  "/dashboard/sdk-install",
+  "/dashboard/sdk",
+  "/dashboard/connect/verify",
   "/dashboard/api",
+  "/dashboard/api/keys",
   "/dashboard/api-keys",
   "/dashboard/connect-site",
   "/dashboard/domain-verification",
@@ -56,26 +57,22 @@ export function isAllowedDestination(path: string): boolean {
   if (!path || !path.startsWith("/") || path.startsWith("//")) return false;
   const pathname = path.split("?", 1)[0].split("#", 1)[0];
   if (ALLOWED_DESTINATIONS.has(pathname)) return true;
-  if (/^\/dashboard\/projects\/[^/]+(\/(connect-site|domain|sdk-install|api-keys|avatar-studio|knowledge))?$/.test(pathname)) {
+  if (/^\/dashboard\/projects\/[^/]+(\/(connect-site|domain|install|sdk-install|api-keys|avatar-studio|knowledge))?$/.test(pathname)) {
     return true;
   }
   return false;
 }
 
-export async function createOnboardingSession(api: ApiClient, userId?: string, authSessionId?: string): Promise<OnboardingSession> {
-  const verifiedUserId = userId?.trim();
-  if (verifiedUserId && !isValidUserId(verifiedUserId)) {
-    throw new ApiError("Invalid User ID.", 400, "INVALID_USER_ID");
-  }
+export async function createOnboardingSession(api: ApiClient, authSessionId: string): Promise<OnboardingSession> {
   let body: Record<string, unknown>;
   try {
     body = record(await api.request<unknown>("/cli/onboarding/session", {
       method: "POST",
-      headers: authSessionId ? {
-        Authorization: `Bearer ${authSessionId}`,
+      headers: {
+        Authorization: "Bearer " + authSessionId,
         "X-Asiyst-Session": authSessionId,
-      } : undefined,
-      body: JSON.stringify(verifiedUserId ? { userId: verifiedUserId } : {}),
+      },
+      body: JSON.stringify({}),
     }));
   } catch (error) {
     if (error instanceof ApiError && error.code === "NOT_FOUND") {
@@ -87,13 +84,10 @@ export async function createOnboardingSession(api: ApiClient, userId?: string, a
     }
     throw error;
   }
-  const sessionId = stringValue(body, "sessionId", "session_id");
+  const sessionId = stringValue(body, "sessionId", "session_id", "onboardingSessionId", "onboarding_session_id");
   if (!sessionId) throw new ApiError("The API did not return an onboarding session.", 200, "MALFORMED_RESPONSE");
   const returnedUserId = stringValue(body, "userId", "user_id");
-  if (returnedUserId && verifiedUserId && returnedUserId !== verifiedUserId) {
-    throw new ApiError("The API returned a different User ID.", 200, "USER_MISMATCH");
-  }
-  return { sessionId, userId: returnedUserId ?? verifiedUserId, expiresAt: stringValue(body, "expiresAt", "expires_at") };
+  return { sessionId, userId: returnedUserId, expiresAt: stringValue(body, "expiresAt", "expires_at") };
 }
 
 export async function createWebHandoff(
@@ -122,6 +116,11 @@ export async function createWebHandoff(
     throw error;
   }
   const token = stringValue(body, "handoffToken", "handoff_token", "token");
-  if (!token) throw new ApiError("The API did not return a web handoff.", 200, "MALFORMED_RESPONSE");
-  return { token, expiresAt: stringValue(body, "expiresAt", "expires_at") };
+  const url = stringValue(body, "authorizationUrl", "authorization_url", "handoffUrl", "handoff_url", "url");
+  if (!token && !url) throw new ApiError("The API did not return a web handoff.", 200, "MALFORMED_RESPONSE");
+  return {
+    token: token ?? "",
+    url,
+    expiresAt: stringValue(body, "expiresAt", "expires_at"),
+  };
 }

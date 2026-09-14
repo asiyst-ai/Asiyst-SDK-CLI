@@ -2,10 +2,13 @@ export interface ProjectDetection {
   cwd: string;
   packageJson: Record<string, unknown> | null;
   sdkVersion?: string;
+  sdkInstalled?: boolean;
   framework: string;
   language: string;
   packageManager: string;
   config: { projectId?: string; publicKey?: string };
+  entryPoint?: string;
+  entryStrategy?: string;
 }
 
 export interface VerificationResult {
@@ -39,6 +42,9 @@ export interface SafeProjectInfo {
   website?: string;
   connectionStatus?: string;
   lastSdkConnection?: string;
+  sdkActivityStatus?: string;
+  sdkInitializationStatus?: string;
+  sdkVerificationStatus?: string;
   domainStatus?: string;
   avatarStatus?: string;
   publishedConfigurationStatus?: string;

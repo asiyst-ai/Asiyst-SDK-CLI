@@ -25,6 +25,55 @@ export interface ConsumedLogin {
   expiresAt?: string;
 }
 
+export type ExistingSessionValidation =
+  | { state: "valid"; accountEmail?: string; userId?: string; expiresAt?: string }
+  | { state: "invalid" }
+  | { state: "unavailable"; error: ApiError };
+
+export async function validateExistingSession(
+  api: ApiClient,
+  sessionId: string,
+): Promise<ExistingSessionValidation> {
+  const token = sessionId.trim();
+  if (!token) return { state: "invalid" };
+
+  try {
+    const body = record(await api.request<unknown>("/cli/onboarding/session", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        "X-Asiyst-Session": token,
+      },
+      body: JSON.stringify({}),
+    }));
+    const authenticated = body.authenticated ?? body.valid ?? body.success;
+    const onboardingSessionId = nestedText(body, ["session", "onboardingSession"], "sessionId", "session_id", "onboardingSessionId", "onboarding_session_id");
+    if (authenticated === false) return { state: "invalid" };
+    if (authenticated !== true && !onboardingSessionId) {
+      throw new ApiError("Asiyst authentication response was invalid.", 200, "MALFORMED_RESPONSE");
+    }
+    return {
+      state: "valid",
+      accountEmail: nestedText(body, ["user", "account"], "accountEmail", "account_email", "email"),
+      userId: nestedText(body, ["user", "account"], "userId", "user_id", "id"),
+      expiresAt: nestedText(body, ["session"], "expiresAt", "expires_at", "expires"),
+    };
+  } catch (error) {
+    if (error instanceof ApiError && (
+      error.status === 401
+      || error.code === "SESSION_EXPIRED"
+    )) {
+      return { state: "invalid" };
+    }
+    return {
+      state: "unavailable",
+      error: error instanceof ApiError
+        ? error
+        : new ApiError("Unable to verify the existing Asiyst session.", undefined, "NETWORK"),
+    };
+  }
+}
+
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new ApiError("Received an unexpected response from Asiyst.", 200, "MALFORMED_RESPONSE");

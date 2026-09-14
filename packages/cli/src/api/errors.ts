@@ -25,6 +25,8 @@ export type ApiErrorCode =
   | "AVATAR_ALREADY_IMPORTED"
   | "AVATAR_MISMATCH"
   | "IMPORT_FAILED"
+  | "HANDOFF_FAILED"
+  | "SDK_NOT_ACTIVE"
   | "UNKNOWN";
 
 export class ApiError extends Error {
@@ -58,9 +60,11 @@ export function errorCodeFromStatus(status: number, bodyCode?: string): ApiError
   if (code === "AVATAR_ALREADY_IMPORTED") return "AVATAR_ALREADY_IMPORTED";
   if (code === "RATE_LIMITED") return "RATE_LIMITED";
   if (code === "INTERNAL_ERROR") return "INTERNAL_ERROR";
+  if (code === "SDK_NOT_ACTIVE") return "SDK_NOT_ACTIVE";
   if (status === 401) return "SESSION_EXPIRED";
   if (status === 403) return "FORBIDDEN";
   if (status === 404) return "NOT_FOUND";
+  if (status === 405) return "INVALID_REQUEST";
   if (status === 409) return "CONFLICT";
   if (status === 400 || status === 422) return "INVALID_REQUEST";
   if (status === 429) return "RATE_LIMITED";
@@ -98,5 +102,6 @@ export function friendlyApiMessage(error: ApiError, endpointUrl?: string): strin
   if (error.code === "AVATAR_NOT_FOUND") return "✗ Avatar was not found.";
   if (error.code === "AVATAR_ALREADY_IMPORTED") return "✗ This avatar is already imported into the project.";
   if (error.code === "INTERNAL_ERROR") return "✗ Asiyst is temporarily unavailable.";
+  if (error.code === "HANDOFF_FAILED") return "✗ Unable to establish the Asiyst browser session.\n  Please retry /connect.";
   return "✗ Asiyst request failed.";
 }

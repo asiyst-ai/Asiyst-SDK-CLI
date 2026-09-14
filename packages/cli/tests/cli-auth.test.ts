@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../src/api/client.js";
-import { consumeLoginChallenge, createLoginChallenge, pollLoginChallenge } from "../src/api/cli-auth.js";
+import { consumeLoginChallenge, createLoginChallenge, pollLoginChallenge, validateExistingSession } from "../src/api/cli-auth.js";
 
 const userId = "A7kP2m-Q9xL4nT8X";
 
@@ -10,6 +10,84 @@ function api(responses: Response[]): ApiClient {
 }
 
 describe("CLI authentication challenge flow", () => {
+  it("validates an existing session without starting browser authentication", async () => {
+    await expect(validateExistingSession(api([
+      new Response(JSON.stringify({
+        authenticated: true,
+        user: { id: userId, email: "user@example.com" },
+      }), { status: 200 }),
+    ]), "session-secret")).resolves.toEqual({
+      state: "valid",
+      userId,
+      accountEmail: "user@example.com",
+      expiresAt: undefined,
+    });
+  });
+
+  it("classifies rejected sessions as invalid", async () => {
+    await expect(validateExistingSession(api([
+      new Response(JSON.stringify({ code: "SESSION_EXPIRED" }), { status: 401 }),
+    ]), "expired-session")).resolves.toEqual({ state: "invalid" });
+  });
+
+  it("sends both CLI session authentication headers to the production contract", async () => {
+    let request: { url: string; method: string; authorization: string | null; session: string | null } | undefined;
+    const fetcher = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      request = {
+        url: String(url),
+        method: init?.method ?? "GET",
+        authorization: headers.get("Authorization"),
+        session: headers.get("X-Asiyst-Session"),
+      };
+      return new Response(JSON.stringify({
+        success: true,
+        sessionId: "onboarding-session",
+        user: { id: userId, email: "user@example.com" },
+      }), { status: 200 });
+    });
+
+    await validateExistingSession(new ApiClient("https://api.example.test", fetcher), "cli-session");
+    expect(request).toEqual({
+      url: "https://api.example.test/cli/onboarding/session",
+      method: "POST",
+      authorization: "Bearer cli-session",
+      session: "cli-session",
+    });
+  });
+
+  it.each([
+    [404, "NOT_FOUND"],
+    [405, "INVALID_REQUEST"],
+    [500, "INTERNAL_ERROR"],
+  ])("keeps HTTP %s distinct from network failure", async (status, code) => {
+    const result = await validateExistingSession(api([
+      new Response(JSON.stringify({ message: `HTTP ${status}` }), { status }),
+    ]), "cli-session");
+    expect(result).toMatchObject({ state: "unavailable", error: { status, code } });
+  });
+
+  it("does not invalidate a session when validation cannot reach the API", async () => {
+    const fetcher = vi.fn(async () => {
+      throw new TypeError("network unavailable");
+    });
+    const result = await validateExistingSession(
+      new ApiClient("https://example.test", fetcher),
+      "session-secret",
+    );
+    expect(result.state).toBe("unavailable");
+    expect(result).toMatchObject({ error: { code: "NETWORK" } });
+  });
+
+  it("rejects malformed session validation responses", async () => {
+    await expect(validateExistingSession(api([
+      new Response(JSON.stringify({}), { status: 200 }),
+    ]), "session-secret")).resolves.toMatchObject({
+      state: "unavailable",
+      error: { code: "MALFORMED_RESPONSE" },
+    });
+  });
+
   it("opens the backend-provided login URL before CLI authorization", async () => {
     const challenge = await createLoginChallenge(api([
       new Response(JSON.stringify({

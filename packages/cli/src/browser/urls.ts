@@ -1,7 +1,7 @@
 import { ASIYST_WEB_URL } from "../config/api.js";
 import { muted } from "../ui/format.js";
 
-export const ASIYST_PRODUCTION_ORIGIN = "https://asiyst.com";
+export const ASIYST_PRODUCTION_ORIGIN = ASIYST_WEB_URL;
 
 const SENSITIVE_QUERY_PARAMS = new Set([
   "token",
@@ -36,7 +36,11 @@ export function buildAsiystUrl(path: string, queryParams?: Record<string, string
       parsedUrl.protocol = "https:";
       parsedUrl.hostname = "asiyst.com";
       parsedUrl.port = "";
-    } else if (parsedUrl.origin !== ASIYST_PRODUCTION_ORIGIN && parsedUrl.origin !== ASIYST_WEB_URL) {
+    } else if (
+      parsedUrl.origin !== ASIYST_PRODUCTION_ORIGIN
+      && parsedUrl.origin !== ASIYST_WEB_URL
+      && parsedUrl.origin !== "https://www.asiyst.com"
+    ) {
       throw new Error(`Invalid URL origin "${parsedUrl.origin}". Expected "${ASIYST_PRODUCTION_ORIGIN}".`);
     }
   } else {
@@ -63,42 +67,51 @@ export function buildAsiystUrl(path: string, queryParams?: Record<string, string
 }
 
 export function buildProjectNewUrl(): string {
-  return buildAsiystUrl("/project/new").toString();
+  return buildAsiystUrl("/dashboard/projects").toString();
+}
+
+function buildProjectDashboardUrl(
+  projectId: string,
+  route: "connect-site" | "api-keys" | "sdk-install" | "avatar-studio" | "knowledge",
+  destination: string,
+  queryParams?: Record<string, string | undefined>,
+): string {
+  if (!projectId || projectId === "undefined" || projectId === "null") {
+    throw new Error(`Project ID is required to build ${destination} URL.`);
+  }
+  return buildAsiystUrl(`/dashboard/projects/${encodeURIComponent(projectId)}/${route}`, queryParams).toString();
 }
 
 export function buildDomainVerificationUrl(projectId: string): string {
   if (!projectId || projectId === "undefined" || projectId === "null") {
     throw new Error("Project ID is required to build domain verification URL.");
   }
-  return buildAsiystUrl("/dashboard/connect-site", { projectId }).toString();
+  return buildAsiystUrl("/dashboard/connect/verify").toString();
 }
 
-export function buildApiKeysUrl(projectId: string): string {
-  if (!projectId || projectId === "undefined" || projectId === "null") {
-    throw new Error("Project ID is required to build API keys URL.");
-  }
-  return buildAsiystUrl("/dashboard/api-keys", { projectId }).toString();
+export function buildApiKeysUrl(): string {
+  return buildAsiystUrl("/dashboard/api/keys").toString();
 }
 
 export function buildSdkInstallUrl(projectId: string): string {
   if (!projectId || projectId === "undefined" || projectId === "null") {
     throw new Error("Project ID is required to build SDK installation URL.");
   }
-  return buildAsiystUrl("/dashboard/sdk-install", { projectId }).toString();
+  return buildAsiystUrl(`/dashboard/projects/${encodeURIComponent(projectId)}/install`).toString();
 }
 
 export function buildAvatarStudioUrl(projectId: string): string {
   if (!projectId || projectId === "undefined" || projectId === "null") {
     throw new Error("Project ID is required to build Avatar Studio URL.");
   }
-  return buildAsiystUrl("/dashboard/avatar-studio", { projectId }).toString();
+  return buildAsiystUrl("/dashboard/avatar-studio").toString();
 }
 
 export function buildKnowledgeUrl(projectId: string, avatarId?: string): string {
   if (!projectId || projectId === "undefined" || projectId === "null") {
     throw new Error("Project ID is required to build Knowledge Base URL.");
   }
-  return buildAsiystUrl("/dashboard/knowledge", { projectId, avatarId }).toString();
+  return buildAsiystUrl("/dashboard/knowledge").toString();
 }
 
 /**

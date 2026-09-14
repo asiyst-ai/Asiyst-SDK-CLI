@@ -44,6 +44,11 @@ describe("initialization", () => {
     const host = document.getElementById("asiyst-host");
     expect(host?.getAttribute("data-asiyst-root")).toBe("true");
   });
+
+  it("opens the assistant after async initialization", async () => {
+    await Asiyst.init({ projectId: "proj_1", publicKey: "pk_test" });
+    expect(() => Asiyst.open()).not.toThrow();
+  });
 });
 
 describe("accessibility", () => {

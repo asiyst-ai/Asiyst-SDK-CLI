@@ -12,11 +12,11 @@ npm install -g @asiyst/cli
 
 ## Commands
 
-`asiyst` detects the current project and opens an interactive command prompt. Use `asiyst connect --project-id <PROJECT_ID>` or `asiyst connect` to start the authentication and project connection flow. The CLI requires an explicit public Project ID when connecting a project; it will not silently infer or substitute the developer account user ID.
+`asiyst` detects the current project and opens an interactive command prompt. Use `asiyst connect --project-id <PROJECT_ID>` or `asiyst connect` to start the authentication and project connection flow. Without `--project-id`, the authenticated flow uses an arrow-key selector to choose an existing project or create a new one through the secure web handoff, then asks for the public Project ID. The CLI never prompts for a User ID or substitutes the authenticated account ID for a project ID.
 
 Other commands are `login`, `logout`, `status`, `verify`, `doctor`/`diagnostics`, `dashboard`, `avatar`, `update`, `trust`, and `revoke-trust`.
 
-`asiyst login` starts browser authorization with a randomly assigned localhost callback. The CLI registers the callback and state with `POST /cli/auth/challenge`, opens the returned Asiyst authorization URL, validates the one-time callback code and state, consumes the challenge, and securely stores the verified CLI session. Approval in the browser alone is not treated as a successful login. No User ID, project ID, or API key is requested by login.
+`asiyst login` checks the existing CLI session with the authenticated session endpoint before acting. A valid session is reused without opening the browser; an expired or rejected session is cleared and replaced through browser authorization. If the API cannot be reached, the existing session is preserved and login reports that it could not be verified. With no valid session, browser authorization uses a randomly assigned localhost callback: the CLI registers the callback and state with `POST /cli/auth/challenge`, opens the returned Asiyst authorization URL, validates the one-time callback code and state, consumes the challenge, and securely stores the verified CLI session. Approval in the browser alone is not treated as a successful login. No User ID, project ID, or API key is requested by login.
 
 ```sh
 asiyst connect --project-id K8mP2xQ7_vL4N9cR5T1zB6Y3
@@ -25,7 +25,7 @@ asiyst avatar import --avatar-id A7K9M2QX4P
 asiyst disconnect
 ```
 
-The connection flow verifies the authenticated account, selected 24-character Project ID, API key, and selected 10-character Avatar ID. The API verifies that the account, key, selected project, and avatar belong together before the connection is saved. Use `asiyst connect --project-id <PROJECT_ID> --avatar-id <AVATAR_ID>` to provide both IDs non-interactively; otherwise the CLI opens the relevant dashboard pages and prompts for them.
+The connection flow verifies the authenticated account, selected 24-character Project ID, API key, and selected 10-character Avatar ID. The API verifies that the account, key, selected project, and avatar belong together before the connection is saved. Use `asiyst connect --project-id <PROJECT_ID> --avatar-id <AVATAR_ID>` to bypass project selection and provide both IDs non-interactively; otherwise the CLI opens the relevant dashboard pages and prompts for them. Invalid project IDs can be corrected and retried, while expired sessions and unauthorized projects report actionable errors.
 
 Avatar import calls the authenticated CLI project import operation and sends `userId`, `projectId`, and `avatarId` as identifiers; the API key is sent only through authentication headers. The server remains responsible for ownership, project access, avatar existence, active-project checks, and duplicate detection.
 
@@ -47,12 +47,13 @@ GitHub repository
 The CLI connection flow proceeds as:
 
 ```text
-Step 1: Project creation / verification
-  -> Step 2: Domain verification
-  -> Step 3: API key verification
-  -> Step 4: SDK install & setup
-  -> Step 5: Avatar configuration & import
-  -> Step 6: Knowledge source connection
+Step 1: Authenticated account
+  -> Step 2: Existing project selection or secure project creation / verification
+  -> Step 3: Domain verification
+  -> Step 4: API key verification
+  -> Step 5: SDK install & setup
+  -> Step 6: Avatar configuration & import
+  -> Step 7: Knowledge source connection
   -> Final verification
 ```
 
