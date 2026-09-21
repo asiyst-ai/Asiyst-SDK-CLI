@@ -1,6 +1,6 @@
 {
   "name": "@asiyst/cli",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "description": "Connect a local website project to Asiyst",
   "license": "MIT",
   "type": "module",

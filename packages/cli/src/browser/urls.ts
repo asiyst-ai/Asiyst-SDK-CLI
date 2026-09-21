@@ -100,6 +100,10 @@ export function buildSdkInstallUrl(projectId: string): string {
   return buildAsiystUrl(`/dashboard/projects/${encodeURIComponent(projectId)}/install`).toString();
 }
 
+export function buildSdkDashboardUrl(): string {
+  return buildAsiystUrl("/dashboard/sdk").toString();
+}
+
 export function buildAvatarStudioUrl(projectId: string): string {
   if (!projectId || projectId === "undefined" || projectId === "null") {
     throw new Error("Project ID is required to build Avatar Studio URL.");

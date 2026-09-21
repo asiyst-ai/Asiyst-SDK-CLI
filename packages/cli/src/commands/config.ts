@@ -1,6 +1,6 @@
 import { clearConnection, loadConnection } from "../config/credentials.js";
 import { clearProjectMetadata } from "../config/project.js";
-import { detectProject } from "../detection/project.js";
+import { detectEnvironment, detectProject } from "../detection/project.js";
 import { readCurrentVersion } from "../config/version.js";
 import { confirm } from "./shared.js";
 
@@ -21,7 +21,7 @@ export async function configCommand(cwd = process.cwd(), args: string[] = []): P
   console.log(`User: ${connection?.userId ? "Connected" : "Not configured"}`);
   console.log(`Project: ${connection?.projectName ?? "Not configured"}`);
   console.log(`Project ID: ${connection?.projectId ?? "Not configured"}`);
-  console.log("Environment: Production");
+  console.log(`Environment: ${detectEnvironment()}`);
   console.log(`CLI Version: ${readCurrentVersion()}`);
   console.log(`SDK Version: ${project.sdkVersion ?? "Not installed"}`);
   console.log(`API Key: ${connection?.apiKey ? "Configured" : "Not configured"}`);

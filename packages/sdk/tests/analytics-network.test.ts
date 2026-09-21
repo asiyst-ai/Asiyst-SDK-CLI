@@ -23,6 +23,98 @@ describe("analytics batching", () => {
 });
 
 describe("cloud communication", () => {
+  it("sends the initialization heartbeat to the production API with public credentials and origin", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      status: "connected",
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetcher);
+
+    const client = new Client(
+      new HttpTransport({
+        apiBaseUrl: "https://asiyst.com/api/v1",
+        projectId: "public_project_7f3a",
+        publicKey: "public_sdk_key_abc123",
+      }),
+      "public_project_7f3a",
+      "public_sdk_key_abc123",
+    );
+    await expect(client.heartbeat({
+      origin: "https://www.example.com",
+      environment: "production",
+      timestamp: "2026-09-15T00:00:00.000Z",
+    })).resolves.toMatchObject({ ok: true, status: 200 });
+
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://asiyst.com/api/v1/sdk/heartbeat",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "X-Asiyst-Project-Id": "public_project_7f3a",
+          "X-Asiyst-Public-Key": "public_sdk_key_abc123",
+          "X-Asiyst-SDK-Version": "0.1.12",
+        }),
+      }),
+    );
+    const firstCall = fetcher.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    const request = firstCall?.[1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toEqual({
+      project_id: "public_project_7f3a",
+      public_key: "public_sdk_key_abc123",
+      sdk_version: "0.1.12",
+      origin: "https://www.example.com",
+      environment: "production",
+      timestamp: "2026-09-15T00:00:00.000Z",
+    });
+    expect(JSON.stringify(request.body)).not.toContain("session");
+    vi.unstubAllGlobals();
+  });
+
+  it("registers an installation with the persistent installation endpoint", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      installation_id: "installation-1",
+      status: "registered",
+    }), {
+      status: 201,
+      headers: { "content-type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetcher);
+    const client = new Client(
+      new HttpTransport({
+        apiBaseUrl: "https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api",
+        projectId: "public_project_7f3a",
+        publicKey: "public_sdk_key_abc123",
+      }),
+      "public_project_7f3a",
+      "public_sdk_key_abc123",
+    );
+    await expect(client.registerInstallation({
+      project_id: "public_project_7f3a",
+      public_key: "public_sdk_key_abc123",
+      installation_id: "installation-1",
+      origin: "https://caszio.com",
+      environment: "production",
+      sdk_version: "0.1.12",
+    })).resolves.toMatchObject({ status: "registered" });
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api/sdk/installations/register",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const request = fetcher.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      project_id: "public_project_7f3a",
+      public_key: "public_sdk_key_abc123",
+      installation_id: "installation-1",
+      origin: "https://caszio.com",
+      environment: "production",
+      sdk_version: "0.1.12",
+    });
+    vi.unstubAllGlobals();
+  });
+
   it("surfaces network failures instead of synthesizing a task plan", async () => {
     vi.stubGlobal(
       "fetch",

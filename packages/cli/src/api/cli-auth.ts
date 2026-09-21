@@ -261,14 +261,6 @@ export async function consumeLoginChallenge(api: ApiClient, challengeId: string,
     throw new ApiError("Asiyst authentication response was invalid.", 200, "MALFORMED_RESPONSE");
   }
   const normalizedUserId = userId && isValidUserId(userId) ? userId : undefined;
-  if (process.env.ASIIYST_DEBUG === "1" || process.env.ASIIYST_DEBUG === "true"
-    || process.env.ASIYST_DEBUG === "1" || process.env.ASIYST_DEBUG === "true") {
-    const token = sessionId;
-    console.error(`[asiyst-debug] CLI SESSION authenticated: true`);
-    console.error(`[asiyst-debug] token: ${token.slice(0, 4)}…${token.slice(-4)} (${token.length})`);
-    console.error(`[asiyst-debug] userId: ${normalizedUserId ?? "absent"}`);
-    console.error(`[asiyst-debug] expiresAt: ${text(body, "expiresAt", "expires_at", "expires") ?? "absent"}`);
-  }
   return {
     sessionId,
     refreshToken: nestedText(body, ["session", "cliSession"], "refreshToken", "refresh_token"),

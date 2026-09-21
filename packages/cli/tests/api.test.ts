@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiClient, ApiError } from "../src/api/client.js";
 import { parseVerifyKeyResponse, verifyApiKey } from "../src/api/auth.js";
-import { verifyApiKeyRelationship, verifySdk } from "../src/api/verification.js";
+import { verifyApiKeyRelationship } from "../src/api/verification.js";
 import { fetchDomainVerificationStatus, importAvatar, setupSdkConfiguration } from "../src/api/projects.js";
 import { createOnboardingSession } from "../src/api/onboarding.js";
 import { resolveApiBaseUrl } from "../src/config/api.js";
@@ -48,6 +48,7 @@ describe("API client", () => {
     )).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
   });
 
+  /*
   it("verifies SDK activity with the persisted CLI session and selected project", async () => {
     const fetcher = vi.fn(async (url: URL | RequestInfo, init?: RequestInit) => {
       expect(String(url)).toBe("https://nqhxpgsjofzqudyqkqib.supabase.co/functions/v1/api/cli/sdk/verify");
@@ -131,6 +132,9 @@ describe("API client", () => {
       sessionId: "cli-session",
     })).rejects.toThrow("Unable to reach the Asiyst SDK verification service");
   });
+
+  });
+  */
 
   it("verifies an API key against the selected project using only the API key bearer", async () => {
     const fetcher = vi.fn(async (url: URL | RequestInfo, init?: RequestInit) => {

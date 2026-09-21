@@ -26,6 +26,16 @@ describe("configuration", () => {
     });
   });
 
+  it("accepts dashboard-generated public project IDs and public SDK keys", () => {
+    expect(validateInitOptions({
+      projectId: "public_project_7f3a",
+      publicKey: "public_sdk_key_abc123",
+    })).toEqual({
+      projectId: "public_project_7f3a",
+      publicKey: "public_sdk_key_abc123",
+    });
+  });
+
   it("normalizes unknown remote payloads onto a safe schema", () => {
     const config = normalizeProjectConfig({
       avatarName: "Alex",
@@ -102,5 +112,10 @@ describe("configuration", () => {
     expect(validateWebsiteDomain(config, "https://caszio.com/products/42")).toMatchObject({
       allowed: true,
     });
+  });
+
+  it("normalizes www prefixes and paths when checking the current website", () => {
+    const config = normalizeProjectConfig({ allowedDomains: ["https://example.com/path"] });
+    expect(validateWebsiteDomain(config, "https://www.example.com/shop")).toMatchObject({ allowed: true });
   });
 });

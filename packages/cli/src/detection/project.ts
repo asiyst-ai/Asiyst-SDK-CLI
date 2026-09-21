@@ -44,6 +44,7 @@ export function detectFramework(cwd: string, pkg: Record<string, unknown> | null
   if (hasDependency(deps, "@tanstack/react-start") || hasDependency(deps, "@tanstack/start")) {
     return "tanstack_start_ts";
   }
+
   if (hasDependency(deps, "next") || existsSync(resolve(cwd, "next.config.js")) || existsSync(resolve(cwd, "next.config.mjs")) || existsSync(resolve(cwd, "next.config.ts"))) {
     return "Next.js";
   }
@@ -55,6 +56,18 @@ export function detectFramework(cwd: string, pkg: Record<string, unknown> | null
     return "Vite";
   }
   if (pkg) return existsSync(resolve(cwd, "tsconfig.json")) ? "Vanilla TypeScript" : "Vanilla JavaScript";
+  return "Unknown";
+}
+
+export function displayFramework(framework: string): string {
+  return framework === "tanstack_start_ts" ? "TanStack Start" : framework;
+}
+
+export function detectEnvironment(env: NodeJS.ProcessEnv = process.env): "Development" | "Production" | "Preview" | "Unknown" {
+  const value = env.ASIIYST_ENVIRONMENT?.trim().toLowerCase() || env.NODE_ENV?.trim().toLowerCase();
+  if (value === "development" || value === "dev") return "Development";
+  if (value === "production" || value === "prod") return "Production";
+  if (value === "preview") return "Preview";
   return "Unknown";
 }
 

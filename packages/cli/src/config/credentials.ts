@@ -1,11 +1,14 @@
-import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+﻿import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { createCliLifecycleEmitter } from "../lifecycle.js";
+import { readCurrentVersion } from "./version.js";
 import type { ConnectedProject, OnboardingSession } from "../types.js";
 
 const execFileAsync = promisify(execFile);
+const cliLifecycle = createCliLifecycleEmitter();
 const SERVICE = "Asiyst CLI";
 
 function configDir(): string {
@@ -120,11 +123,13 @@ export async function saveOnboardingSession(session: OnboardingSession): Promise
     if (protectedBlob) {
       writeFileSync(onboardingWindowsBlobPath(), protectedBlob, { encoding: "utf8", mode: 0o600 });
       if (existsSync(onboardingStorePath())) unlinkSync(onboardingStorePath());
+      cliLifecycle.emit("cli.connected", { connected: true, cliVersion: readCurrentVersion(), platform: process.platform });
       return;
     }
   }
   if (existsSync(onboardingWindowsBlobPath())) unlinkSync(onboardingWindowsBlobPath());
   writeFileSync(onboardingStorePath(), JSON.stringify(session, null, 2), { encoding: "utf8", mode: 0o600 });
+  cliLifecycle.emit("cli.connected", { connected: true, cliVersion: readCurrentVersion(), platform: process.platform });
 }
 
 export async function loadOnboardingSession(): Promise<OnboardingSession | undefined> {
@@ -142,8 +147,17 @@ export async function loadOnboardingSession(): Promise<OnboardingSession | undef
 }
 
 export async function clearOnboardingSession(): Promise<void> {
+  const previous = await loadOnboardingSession();
   if (existsSync(onboardingWindowsBlobPath())) unlinkSync(onboardingWindowsBlobPath());
   if (existsSync(onboardingStorePath())) unlinkSync(onboardingStorePath());
+  if (previous) {
+    cliLifecycle.emit("cli.disconnected", {
+      reason: "session_cleared",
+      connected: false,
+      cliVersion: readCurrentVersion(),
+      platform: process.platform,
+    });
+  }
 }
 
 export async function saveConnection(cwd: string, connection: ConnectedProject): Promise<void> {
@@ -184,6 +198,7 @@ export async function loadConnection(cwd: string): Promise<ConnectedProject | un
 
 export async function clearConnection(cwd: string): Promise<void> {
   const account = accountFor(cwd);
+  const existing = readStore()[account];
   if (process.platform === "win32" && existsSync(windowsBlobPath())) {
     const decrypted = await dpapiUnprotect(readFileSync(windowsBlobPath(), "utf8"));
     let next: Record<string, ConnectedProject> = {};
@@ -198,11 +213,13 @@ export async function clearConnection(cwd: string): Promise<void> {
     delete next[account];
     if (Object.keys(next).length === 0) {
       unlinkSync(windowsBlobPath());
+      if (existing) cliLifecycle.emit("cli.disconnected", { projectId: existing.projectId, reason: "connection_cleared", connected: false });
       return;
     }
     const protectedBlob = await dpapiProtect(JSON.stringify(next));
     if (protectedBlob) {
       writeFileSync(windowsBlobPath(), protectedBlob, { encoding: "utf8", mode: 0o600 });
+      if (existing) cliLifecycle.emit("cli.disconnected", { projectId: existing.projectId, reason: "connection_cleared", connected: false });
       return;
     }
   }
@@ -210,6 +227,7 @@ export async function clearConnection(cwd: string): Promise<void> {
   delete next[account];
   if (Object.keys(next).length === 0 && existsSync(storePath())) unlinkSync(storePath());
   else writeStore(next);
+  if (existing) cliLifecycle.emit("cli.disconnected", { projectId: existing.projectId, reason: "connection_cleared", connected: false });
 }
 
 export { SERVICE };

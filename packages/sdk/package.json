@@ -1,6 +1,6 @@
 {
   "name": "@asiyst/sdk",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Client-side runtime that connects a website to Asiyst Cloud",
   "license": "MIT",
   "type": "module",

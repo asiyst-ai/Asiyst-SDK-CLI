@@ -11,7 +11,19 @@ export const DEFAULT_ALLOWED: ActionKind[] = [
 ];
 
 function normalizeHost(host: string): string {
-  return host.replace(/^https?:\/\//i, "").replace(/\/$/, "").toLowerCase();
+  const candidate = host.trim();
+  try {
+    const parsed = new URL(/^[a-z][a-z\d+\-.]*:\/\//i.test(candidate) ? candidate : `https://${candidate}`);
+    return (parsed.hostname ?? "").replace(/^www\./i, "").toLowerCase();
+  } catch {
+    const fallbackHost = candidate
+      .replace(/^https?:\/\//i, "")
+      .split("/", 1)[0] ?? "";
+    return fallbackHost
+      .replace(/^www\./i, "")
+      .replace(/:\d+$/, "")
+      .toLowerCase();
+  }
 }
 
 function matchesRoutePattern(pathname: string, pattern: string): boolean {

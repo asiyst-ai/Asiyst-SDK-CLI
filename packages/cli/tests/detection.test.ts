@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
-import { detectFramework, detectProject, resolveApplicationEntryPoint } from "../src/detection/project.js";
+import { detectEnvironment, detectFramework, detectProject, displayFramework, resolveApplicationEntryPoint } from "../src/detection/project.js";
 
 describe("project detection", () => {
   it("detects SDK and Next.js", () => {
@@ -28,5 +28,11 @@ describe("project detection", () => {
       entryPoint: "src/routes/__root.tsx",
       strategy: "root-client-integration",
     });
+  });
+  it("keeps framework metadata separate from user-facing project and environment values", () => {
+    expect(displayFramework("tanstack_start_ts")).toBe("TanStack Start");
+    expect(detectEnvironment({})).toBe("Unknown");
+    expect(detectEnvironment({ NODE_ENV: "development" })).toBe("Development");
+    expect(detectEnvironment({ ASIIYST_ENVIRONMENT: "production", NODE_ENV: "development" })).toBe("Production");
   });
 });

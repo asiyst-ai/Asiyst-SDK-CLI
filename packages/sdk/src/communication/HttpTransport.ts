@@ -25,6 +25,7 @@ export class HttpTransport implements CloudTransport {
           "X-Asiyst-Public-Key": this.options.publicKey,
           ...(this.options.avatarId ? { "X-Asiyst-Avatar-Id": this.options.avatarId } : {}),
           "X-Asiyst-SDK-Version": SDK_VERSION,
+          ...(req.authorizationToken ? { Authorization: `Bearer ${req.authorizationToken}` } : {}),
         },
         body: req.body === undefined ? undefined : JSON.stringify(req.body),
         signal: req.signal,

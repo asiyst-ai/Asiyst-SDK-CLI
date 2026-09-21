@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Asiyst } from "../src/client/Asiyst";
 import { InitializationError } from "../src/errors";
 import { prefersReducedMotion } from "../src/accessibility/a11y";
+import { loadOrCreateInstallationId } from "../src/installation/Installation";
 
 describe("initialization", () => {
   beforeEach(() => {
@@ -48,6 +49,13 @@ describe("initialization", () => {
   it("opens the assistant after async initialization", async () => {
     await Asiyst.init({ projectId: "proj_1", publicKey: "pk_test" });
     expect(() => Asiyst.open()).not.toThrow();
+  });
+
+  it("persists and reuses the installation ID for a project", () => {
+    const first = loadOrCreateInstallationId("public_project_7f3a");
+    const second = loadOrCreateInstallationId("public_project_7f3a");
+    expect(first).toBe(second);
+    expect(first).toMatch(/^inst_[A-Za-z0-9-]+$/);
   });
 });
 

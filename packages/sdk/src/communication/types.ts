@@ -3,6 +3,7 @@ export interface CloudRequest {
   method: "GET" | "POST";
   body?: unknown;
   signal?: AbortSignal;
+  authorizationToken?: string;
 }
 
 export interface CloudResponse<T> {

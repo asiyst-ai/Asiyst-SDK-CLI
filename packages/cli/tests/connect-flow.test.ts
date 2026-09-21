@@ -263,11 +263,11 @@ describe("CLI connect flow", () => {
           domainStatus: "verified",
           website: "https://myapp.example",
           publicKey: TEST_PUBLIC_KEY,
-          connectionStatus: "connected",
+          connectionStatus: "configured",
           publishedConfigurationStatus: "active",
-          sdkActivityStatus: "active",
-          sdkInitializationStatus: "initialized",
-          sdkVerificationStatus: "verified",
+          sdkActivityStatus: "not_detected",
+          sdkInitializationStatus: "not_reported",
+          sdkVerificationStatus: "pending",
         }), { status: 200 });
       }
       if (urlStr.includes("/cli/onboarding/handoff")) {
@@ -318,22 +318,30 @@ describe("CLI connect flow", () => {
     expect(logged).toContain("Step 3 — Domain Verification");
     expect(logged).toContain("Step 4 — API Key");
     expect(logged).toContain("Step 5 — SDK Setup");
-    expect(logged).toContain("Step 6 — Final Verification");
-    expect(logged).toContain("Account connected");
-    expect(logged).toContain("Project connected");
+    expect(logged).not.toContain("Step 6 — Final Verification");
+    expect(logged).not.toContain("Final connection verification failed");
+    expect(logged).toContain("Continue SDK setup in your browser:");
+    expect(logged).toContain("https://asiyst.com/dashboard/sdk");
     expect(logged).toContain("Domain verified");
     expect(logged).toContain("API key verified");
-    expect(logged).toContain("SDK verified");
-    expect(logged).toContain("Asiyst connected successfully.");
+    expect(logged).toContain("SDK configuration verified");
+    expect(logged).toContain("✓ Browser opened.");
+    expect(logged).not.toContain("Keep the website open");
+    expect(logged).not.toContain("Verifying SDK activity with Asiyst");
+    expect(logged).not.toContain("Step 6 — Final Verification");
+    expect(logged).toContain("https://asiyst.com/dashboard/sdk");
 
     const handoffRequests = requests.filter((request) => request.url.includes("/cli/onboarding/handoff"));
     expect(handoffRequests.map((request) => (request.body as { path?: string })?.path)).toEqual([
       "/dashboard/connect/verify",
+      "/dashboard/sdk",
     ]);
     expect(handoffRequests.every((request) => request.headers.get("X-Asiyst-Session") === `onboarding_${TEST_SESSION_ID}`)).toBe(true);
     expect(openedUrls).toEqual([
       "https://asiyst.com/cli/onboarding/handoff?token=handoff_token_123",
+      "https://asiyst.com/cli/onboarding/handoff?token=handoff_token_123",
     ]);
+    expect(requests.some((request) => request.url.includes("/cli/sdk/verify"))).toBe(false);
 
     // Verify /verify/user was NOT called
     const urls = requests.map((r) => r.url);
@@ -636,7 +644,8 @@ describe("CLI connect flow", () => {
     // Must show verifying and success messages on retry
     expect(logged).toContain("→ Verifying API key...");
     expect(logged).toContain("API key verified");
-    expect(logged).toContain("Asiyst connected successfully.");
+    expect(logged).not.toContain("Step 6 — Final Verification");
+    expect(logged).toContain("https://asiyst.com/dashboard/sdk");
 
     // The raw secret API key must never be logged in plain text
     expect(logged).not.toContain(INVALID_KEY);

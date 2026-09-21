@@ -6,6 +6,7 @@ import {
   buildDomainVerificationUrl,
   buildApiKeysUrl,
   buildSdkInstallUrl,
+  buildSdkDashboardUrl,
   buildAvatarStudioUrl,
   buildKnowledgeUrl,
   sanitizeUrlForLogging,
@@ -40,6 +41,10 @@ describe("Centralized URL Redirect System", () => {
     const sdkUrl = new URL(buildSdkInstallUrl(TEST_PROJECT_ID));
     expect(sdkUrl.origin).toBe("https://asiyst.com");
     expect(sdkUrl.pathname).toBe(`/dashboard/projects/${TEST_PROJECT_ID}/install`);
+
+    const sdkDashboardUrl = new URL(buildSdkDashboardUrl());
+    expect(sdkDashboardUrl.origin).toBe("https://asiyst.com");
+    expect(sdkDashboardUrl.pathname).toBe("/dashboard/sdk");
 
     const avatarUrl = new URL(buildAvatarStudioUrl(TEST_PROJECT_ID));
     expect(avatarUrl.origin).toBe("https://asiyst.com");

@@ -1,5 +1,5 @@
 import { ApiClient } from "../api/client.js";
-import { verifyApiKeyRelationship, verifyProject, verifySdk } from "../api/verification.js";
+import { verifyApiKeyRelationship, verifyProject } from "../api/verification.js";
 import { fetchDomainVerificationStatus, fetchProjectInfo, setupSdkConfiguration, type DomainVerificationStatus, type SdkSetupResult } from "../api/projects.js";
 import { ApiError, friendlyApiMessage } from "../api/errors.js";
 import { VERIFY_KEY_URL, isDebugEnabled } from "../config/api.js";
@@ -11,6 +11,7 @@ import {
   buildDomainVerificationUrl,
   buildApiKeysUrl,
   buildSdkInstallUrl,
+  buildSdkDashboardUrl,
 } from "../browser/urls.js";
 import { writeProjectMetadata } from "../config/project.js";
 import { detectProject } from "../detection/project.js";
@@ -35,9 +36,6 @@ async function retryOrCancel(message: string): Promise<boolean> {
 
 const DOMAIN_STATUS_POLL_INTERVAL_MS = 1500;
 const DOMAIN_STATUS_TIMEOUT_MS = 2 * 60_000;
-const SDK_ACTIVITY_POLL_INTERVAL_MS = 3000;
-const SDK_ACTIVITY_TIMEOUT_MS = 5 * 60_000;
-
 function domainStatusFailure(status: DomainVerificationStatus): string {
   const detail = [status.errorCode, status.message].filter(Boolean).join(": ");
   return detail ? `✗ Domain verification failed. ${detail}` : "✗ Domain verification failed.";
@@ -465,133 +463,34 @@ export async function connectCommand(cwd = process.cwd(), api = createApiClient(
     return;
   }
   ok("SDK configuration verified");
-  console.log("SDK setup:");
-  console.log("1. Install/configure @asiyst/sdk");
-  console.log("2. Start your website");
-  console.log("3. Open the verified domain");
-  const activityReady = await readInput("Keep the website open, then press Enter to verify SDK activity: ");
-  if (activityReady === undefined) {
-    console.log("Connection cancelled.");
-    return;
-  }
-  let activityDeadline = Date.now() + SDK_ACTIVITY_TIMEOUT_MS;
-  let sdkActivityVerified = false;
-  let sdkVerification: Awaited<ReturnType<typeof verifySdk>> | undefined;
-  for (;;) {
-    console.log("→ Verifying SDK activity with Asiyst...");
-    try {
-      sdkVerification = await verifySdk(api, {
-        projectId,
-        sessionId: existingSession.sessionId,
-        publicKey: sdkPublicKey,
-      });
-      sdkActivityVerified = true;
-      break;
-    } catch (error) {
-      if (error instanceof ApiError && error.code === "SDK_NOT_ACTIVE") {
-        if (Date.now() >= activityDeadline) {
-          console.log("✗ SDK activity was not detected within the verification period.");
-          const choice = await selectOption("What would you like to do?", [
-            { label: "Retry verification", value: "retry" as const },
-            { label: "Open SDK installation page", value: "open" as const },
-            { label: "Cancel", value: "cancel" as const },
-          ]);
-          if (choice.type !== "selected" || choice.value === "cancel") return;
-          activityDeadline = Date.now() + SDK_ACTIVITY_TIMEOUT_MS;
-          if (choice.value === "retry") continue;
-          if (choice.value === "open") {
-            try {
-              await openAuthenticatedWebPage(api, buildSdkInstallUrl(projectId), existingSession, "SDK Installation");
-            } catch (openError) {
-              console.log(`✗ SDK installation page could not be opened. ${openError instanceof ApiError ? openError.message : "Try opening it manually."}`);
-            }
-          }
-          continue;
-        }
-        console.log("→ SDK not active yet.");
-        console.log("  Make sure your website is running and open the verified domain.");
-        console.log(`  Checking again in ${SDK_ACTIVITY_POLL_INTERVAL_MS / 1000} seconds...`);
-        await new Promise((resolve) => setTimeout(resolve, SDK_ACTIVITY_POLL_INTERVAL_MS));
-        continue;
-      }
-      console.log(error instanceof ApiError
-        ? `✗ ${error.message}`
-        : "✗ Unable to reach the Asiyst SDK verification service. Check your internet connection and try again.");
-      if (error instanceof ApiError
-        && (error.status === 429 || error.status === 500 || error.status === 503
-          || error.code === "NETWORK" || error.code === "TIMEOUT")
-        && await retryOrCancel("SDK verification could not be completed temporarily. Retry?")) {
-        activityDeadline = Date.now() + SDK_ACTIVITY_TIMEOUT_MS;
-        continue;
-      }
+  console.log("→ Opening ASIYST SDK setup...");
+  try {
+    const browserOpened = await openAuthenticatedWebPage(api, buildSdkDashboardUrl(), existingSession);
+    if (!browserOpened) {
+      console.log("✗ Unable to open ASIYST SDK setup.");
       return;
     }
+    console.log("✓ Browser opened.");
+    console.log("\nContinue SDK setup in your browser:");
+    console.log(buildSdkDashboardUrl());
+    console.log("The browser should now open automatically.");
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      console.log("Your Asiyst session has expired.");
+      console.log("Run /login, then retry /connect.");
+      return;
+    }
+    console.log("✗ Unable to open ASIYST SDK setup.");
+    console.log(error instanceof ApiError
+      ? error.message
+      : error instanceof Error
+        ? error.message
+        : "The browser handoff failed.");
+    return;
   }
-  if (!sdkActivityVerified) return;
-  ok("SDK activity detected");
-  ok("SDK verified");
-  ok("Project-bound SDK configuration verified");
-  ok("SDK setup complete");
 
   const effectiveUserId = userId || connected.userId || verifiedProject.userId || existingSession.userId || "";
   const publicKey = sdkPublicKey;
-
-  // STEP 6 — Final Verification
-  console.log("\nStep 6 — Final Verification");
-  let finalState: Awaited<ReturnType<typeof fetchProjectInfo>> | undefined;
-  for (;;) {
-    try {
-      finalState = await fetchProjectInfo(api, projectId, {
-        apiKey,
-        sessionId: existingSession.sessionId,
-      });
-      break;
-    } catch (error) {
-      console.log(`✗ Final connection verification failed. ${error instanceof ApiError ? error.message : "Unable to verify the selected project."}`);
-      if (error instanceof ApiError
-        && (error.status === 503 || error.code === "NETWORK" || error.code === "TIMEOUT")
-        && await retryOrCancel("Unable to verify the final connection state. Retry?")) {
-        continue;
-      }
-      return;
-  }
-  }
-  const normalized = (value: string | undefined): string => value?.trim().toLowerCase().replace(/[\s-]+/g, "_") ?? "";
-  const publicConfiguration = ["active", "published", "configured", "verified", "connected"].includes(normalized(finalState.publishedConfigurationStatus));
-  const domainVerified = ["verified", "active", "connected", "success", "succeeded"].includes(normalized(finalState.domainStatus));
-  const sdkConnected = ["connected", "active", "verified"].includes(normalized(finalState.connectionStatus));
-  const sdkVerified = !finalState.sdkVerificationStatus
-    || ["verified", "active", "connected", "success", "succeeded"].includes(normalized(finalState.sdkVerificationStatus));
-  const sdkInitialized = !finalState.sdkInitializationStatus
-    || ["initialized", "active", "connected", "verified", "success", "succeeded"].includes(normalized(finalState.sdkInitializationStatus));
-  const sdkActivity = !finalState.sdkActivityStatus
-    || ["detected", "active", "connected", "verified", "success", "succeeded"].includes(normalized(finalState.sdkActivityStatus));
-  if (!domainVerified || !sdkConnected || !publicConfiguration || !sdkVerified || !sdkInitialized || !sdkActivity
-    || finalState.projectId !== projectId || finalState.publicKey !== publicKey) {
-    console.log("✗ Final connection verification failed. The selected project is missing a required server-side installation state.");
-    return;
-  }
-  console.log("✓ Domain verified");
-  console.log("✓ API key verified");
-  console.log("✓ SDK verified");
-  console.log("✓ Asiyst connection verified");
-  if (sdkVerification?.verifiedAt) {
-    console.log(`✓ SDK verification time: ${sdkVerification.verifiedAt}`);
-  }
-
-  // Connection Complete & Summary Checklist
-  console.log("\nConnection Complete");
-  console.log("\nASIYST CONNECTION");
-  console.log("------------------");
-  console.log("✓ Account connected");
-  console.log("✓ Project connected");
-  console.log("✓ Domain verified");
-  console.log("✓ API key verified");
-  console.log("✓ SDK verified");
-  console.log(`SDK version: ${detected.sdkVersion ?? "unknown"}`);
-  console.log(`Environment: ${finalState.website ? "production" : "unknown"}`);
-  if (finalState.website) console.log(`Domain: ${finalState.website}`);
-  if (sdkVerification?.verifiedAt) console.log(`Verified: ${sdkVerification.verifiedAt}`);
   const finalConnection = {
     ...connected,
     projectName: connected.projectName ?? verifiedProject.projectName,
@@ -602,23 +501,6 @@ export async function connectCommand(cwd = process.cwd(), api = createApiClient(
   };
   await saveConnection(cwd, finalConnection);
   writeProjectMetadata(cwd, finalConnection);
-  console.log("\n✓ Asiyst connected successfully.");
-  console.log("\nASIYST SDK");
-  console.log("Connected");
-  console.log(`Project: ${finalConnection.projectName ?? projectId}`);
-  console.log(`Project ID: ${projectId}`);
-  console.log(`Website: ${finalConnection.website ?? "Verified"}`);
-  console.log(`Environment: ${finalConnection.website ? "production" : "unknown"}`);
-  console.log("SDK: @asiyst/sdk");
-  console.log(`SDK Version: ${detected.sdkVersion ?? "unknown"}`);
-  console.log(`Status: ${sdkVerification ? "Connected" : "Not connected"}`);
-  if (sdkVerification?.verifiedAt) console.log(`Verified: ${sdkVerification.verifiedAt}`);
-  console.log("CLI: Connected");
-  console.log("\nNext action: run /import avatar to configure an avatar.");
-
-  console.log(`\nProject ID:\n${projectId}`);
-  if (connected.projectName) console.log(`\nProject:\n${connected.projectName}`);
-  if (connected.website) console.log(`\nWebsite:\n${connected.website}`);
 }
 
 export async function initCommand(cwd = process.cwd(), api: ApiClient = createApiClient(), cliProjectId?: string): Promise<void> {

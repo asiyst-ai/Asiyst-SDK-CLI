@@ -35,6 +35,7 @@ import { pushCommand } from "./push.js";
 import { clearCommand } from "./clear.js";
 import { parseProjectIdArgument } from "../config/ids.js";
 import { setInteractiveSelector, type SelectorOption } from "../ui/selector.js";
+import { detectEnvironment, displayFramework } from "../detection/project.js";
 
 type SlashHandler = (args: string[]) => Promise<void> | void;
 type CommandEntry = { input: string; label: string };
@@ -44,6 +45,12 @@ type LandingStatus = {
   avatar: boolean;
   provider: boolean;
   projectId?: string;
+  projectName?: string;
+  framework?: string;
+  environment?: string;
+  language?: string;
+  packageManager?: string;
+  sdkVersion?: string;
 };
 
 const HELP: Record<string, string> = {
@@ -162,8 +169,9 @@ class TerminalPanel {
       authenticated: Boolean(session),
       connected,
       avatar,
-      provider: Boolean(connection?.apiKey),
+      provider: false,
       projectId: connection?.projectId,
+      projectName: connection?.projectName,
     });
   }
 
@@ -353,6 +361,7 @@ class TerminalPanel {
       statusLine(this.status.avatar ? success(symbols.connected) : muted(symbols.disconnected), "Avatar", this.status.avatar ? "Active" : "Not configured"),
       statusLine(this.status.provider ? success(symbols.connected) : muted(symbols.disconnected), "AI Provider", this.status.provider ? "Configured" : "Not configured"),
       statusLine(this.status.projectId ? success(symbols.connected) : muted(symbols.disconnected), "Project ID", this.status.projectId ?? "—"),
+      statusLine(this.status.projectName ? success(symbols.connected) : muted(symbols.disconnected), "Project", this.status.projectName ?? "—"),
       "",
     ];
     const suggestionRows = suggestions.slice(0, 5).map((item, index) =>
@@ -486,8 +495,10 @@ export async function interactiveHome(): Promise<void> {
   emitKeypressEvents(stdin);
   const panel = new TerminalPanel();
   const project = detectProject();
-  panel.append(`Project: ${project.packageJson?.name ?? process.cwd().split(/[\\/]/).pop() ?? "current-project"}`);
-  panel.append(`Environment: ${project.framework} · ${project.language} · ${project.packageManager}`);
+  const connection = await loadConnection(process.cwd());
+  panel.append(`Project: ${connection?.projectName ?? "—"}`);
+  panel.append(`Framework: ${displayFramework(project.framework)}`);
+  panel.append(`Environment: ${detectEnvironment()} · ${project.language} · ${project.packageManager}`);
   panel.append(`SDK: ${project.sdkVersion ?? "Not installed"}`);
   panel.append("Type / to see available commands.");
   await panel.refreshStatus();

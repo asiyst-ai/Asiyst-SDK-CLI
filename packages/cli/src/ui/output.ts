@@ -1,4 +1,5 @@
 import type { ProjectDetection } from "../types.js";
+import { detectEnvironment, displayFramework } from "../detection/project.js";
 import { muted, section, success, symbols, title, warning } from "./format.js";
 
 export const ok = (label: string, detail = "") => console.log(`${success(symbols.success)} ${label}${detail ? ` (${detail})` : ""}`);
@@ -22,13 +23,15 @@ export function printProjectSummary(project: ProjectDetection, connected: boolea
   console.log(title("Asiyst CLI"));
   console.log();
   console.log(section("Project"));
-  console.log(`  ${projectName || (typeof project.packageJson?.name === "string" ? project.packageJson.name : project.cwd)}`);
+  console.log(`  ${connected && projectName ? projectName : "—"}`);
   if (website) console.log(`  ${muted(website)}`);
   const marker = connected ? success(symbols.connected) : muted(symbols.disconnected);
   console.log(`  ${marker} ${connected ? "Connected" : "Not connected"}`);
   console.log();
   console.log(section("Environment"));
-  console.log(`  ${project.framework} · ${project.language} · ${project.packageManager}`);
+  console.log(`  ${detectEnvironment()} · ${project.language} · ${project.packageManager}`);
+  console.log(`\n${section("Framework")}`);
+  console.log(`  ${displayFramework(project.framework)}`);
 }
 
 export function homeStatus(project?: ProjectDetection, connected = false): void {

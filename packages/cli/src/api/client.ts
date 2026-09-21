@@ -33,8 +33,7 @@ function safeToken(value: string | null | undefined): string {
   if (!value) return "absent";
   const token = value.replace(/^Bearer\s+/i, "").trim();
   if (!token) return "absent";
-  if (token.length <= 8) return `${token.slice(0, 2)}…(${token.length})`;
-  return `${token.slice(0, 4)}…${token.slice(-4)} (${token.length})`;
+  return `present (${token.length})`;
 }
 
 function debugRequest(path: string, method: string, headers: Headers): void {
